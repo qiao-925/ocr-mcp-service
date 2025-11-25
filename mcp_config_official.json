@@ -1,0 +1,44 @@
+{
+  "_comment": "PaddleOCR官方MCP服务配置",
+  "_description": "使用官方paddleocr-mcp包，支持多种管道和工作模式",
+  
+  "mcpServers": {
+    "ocr-service-official": {
+      "command": "paddleocr_mcp",
+      "args": [],
+      "env": {
+        "PADDLEOCR_MCP_PIPELINE": "OCR",
+        "PADDLEOCR_MCP_PPOCR_SOURCE": "local"
+      }
+    },
+    
+    "ocr-service-official-verbose": {
+      "_description": "官方服务（详细日志模式，用于调试）",
+      "command": "paddleocr_mcp",
+      "args": ["--verbose"],
+      "env": {
+        "PADDLEOCR_MCP_PIPELINE": "OCR",
+        "PADDLEOCR_MCP_PPOCR_SOURCE": "local"
+      }
+    },
+    
+    "ocr-service-official-http": {
+      "_description": "官方服务（HTTP模式，适合远程部署）",
+      "command": "paddleocr_mcp",
+      "args": ["--http", "--host", "127.0.0.1", "--port", "8000"],
+      "env": {
+        "PADDLEOCR_MCP_PIPELINE": "OCR",
+        "PADDLEOCR_MCP_PPOCR_SOURCE": "local"
+      }
+    }
+  },
+  
+  "_usage_notes": {
+    "default": "使用默认配置（STDIO模式，OCR管道，本地库）",
+    "verbose": "添加--verbose参数查看详细日志",
+    "http": "使用HTTP模式，可以通过http://127.0.0.1:8000访问",
+    "pipeline_options": "OCR, PP-StructureV3, PaddleOCR-VL",
+    "source_options": "local (本地库), aistudio (AI Studio服务), self_hosted (自托管服务)"
+  }
+}
+

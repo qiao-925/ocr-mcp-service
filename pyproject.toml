@@ -1,0 +1,34 @@
+[project]
+name = "ocr-mcp-service"
+version = "0.1.0"
+description = "OCR MCP服务器 - 基于PaddleOCR 3.x的图片文字识别服务"
+requires-python = ">=3.10"
+dependencies = [
+    "mcp>=1.0.0",
+    "numpy>=1.24.0",
+    "paddleocr>=3.0.0",
+    "paddleocr-mcp>=0.3.0",
+    "paddlepaddle>=3.0.0",
+    "pillow>=10.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "black>=23.0.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0.0",
+]
+test = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ocr_mcp_service"]
+
+[project.scripts]
+ocr-mcp-server = "ocr_mcp_service.__main__:main"

@@ -1,0 +1,42 @@
+{
+  "_comment": "双服务配置示例 - 同时配置手动实现和官方实现",
+  "_generated_at": "2025-01-XX",
+  
+  "mcpServers": {
+    "ocr-service-custom": {
+      "_description": "手动实现的OCR MCP服务（学习用）",
+      "_note": "Entry Point方式，需要先运行: uv pip install -e .",
+      "command": "/home/qiao/Desktop/Git Repo/ocr-mcp-service/.venv/bin/ocr-mcp-server",
+      "args": [],
+      "env": {}
+    },
+    
+    "ocr-service-official": {
+      "_description": "PaddleOCR官方MCP服务（生产用）",
+      "_note": "使用官方paddleocr-mcp包，支持多种管道和工作模式",
+      "command": "paddleocr_mcp",
+      "args": [],
+      "env": {
+        "PADDLEOCR_MCP_PIPELINE": "OCR",
+        "PADDLEOCR_MCP_PPOCR_SOURCE": "local"
+      }
+    },
+    
+    "ocr-service-official-verbose": {
+      "_description": "官方服务（详细日志模式）",
+      "command": "paddleocr_mcp",
+      "args": ["--verbose"],
+      "env": {
+        "PADDLEOCR_MCP_PIPELINE": "OCR",
+        "PADDLEOCR_MCP_PPOCR_SOURCE": "local"
+      }
+    }
+  },
+  
+  "_usage": {
+    "custom": "使用手动实现服务，工具名: recognize_text_from_path, get_mcp_config_info, auto_configure_mcp",
+    "official": "使用官方服务，工具名: ocr (根据管道类型不同)",
+    "switch": "可以在Cursor中切换使用不同服务进行对比测试"
+  }
+}
+

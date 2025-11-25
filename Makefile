@@ -4,45 +4,59 @@
 # 默认目标：直接运行 make 将执行完整工作流
 .DEFAULT_GOAL := all
 
-.PHONY: help install test start run clean ready all check-python check-pip verify generate-config
+.PHONY: help install test start stop clean all check-python check-pip verify generate-config status logs logs-tail
 
-# ==================== 完整工作流（默认） ====================
+# ==================== 默认目标：一键安装 ====================
 
-all: ready
+all: install verify generate-config
 	@echo ""
-	@echo "✅ OCR MCP服务安装完成！"
-	@echo "💡 提示: 运行 make start 可以测试启动服务器"
+	@echo "=================================="
+	@echo "[OK] OCR MCP Service Ready!"
+	@echo "=================================="
+	@echo ""
+	@echo "Installation completed:"
+	@echo "  - Installed all dependencies"
+	@echo "  - Verified installation"
+	@echo "  - Generated configuration template"
+	@echo ""
+	@echo "Next step:"
+	@echo "  1. Copy content from config_template.json"
+	@echo "  2. Add to Cursor MCP settings (see README.md for location)"
+	@echo "  3. Restart Cursor"
 	@echo ""
 
 # ==================== 帮助信息 ====================
 
 help:
 	@echo "=================================="
-	@echo "OCR MCP服务 - Makefile"
+	@echo "OCR MCP Service - Makefile"
 	@echo "=================================="
 	@echo ""
-	@echo "💡 快速开始:"
-	@echo "  make                  - 默认: 完整工作流 (install + verify)"
-	@echo "  make start            - 完整流程并启动服务器"
+	@echo "Quick Start:"
+	@echo "  make                  - One-click install (install + verify + config)"
+	@echo "  make start            - Test start server manually (optional)"
 	@echo ""
-	@echo "📦 安装命令:"
-	@echo "  make install          - 安装项目依赖"
-	@echo "  make install-dev      - 安装开发依赖（包含colorama）"
+	@echo "Install Commands:"
+	@echo "  make install          - Install project dependencies"
+	@echo "  make install-dev      - Install dev dependencies (includes colorama)"
 	@echo ""
-	@echo "🧪 测试命令:"
-	@echo "  make test             - 测试MCP服务器"
-	@echo "  make verify           - 验证安装和配置"
+	@echo "Test Commands:"
+	@echo "  make test             - Test MCP server"
+	@echo "  make verify           - Verify installation and configuration"
 	@echo ""
-	@echo "🚀 运行命令:"
-	@echo "  make run              - 启动MCP服务器"
-	@echo "  make start            - 一键启动 (ready + run)"
+	@echo "Run Commands:"
+	@echo "  make start            - Test start server manually (optional)"
 	@echo ""
-	@echo "🔄 完整工作流:"
-	@echo "  make ready            - 准备就绪 (install + verify + generate-config)"
-	@echo "  make all              - 同 make ready"
+	@echo "Status & Logs:"
+	@echo "  make status           - Check server running status"
+	@echo "  make logs             - View recent log entries (last 50 lines)"
+	@echo "  make logs-tail        - Tail log file (follow mode)"
 	@echo ""
-	@echo "🧹 清理命令:"
-	@echo "  make clean            - 清理生成的文件"
+	@echo "Service Control:"
+	@echo "  make stop             - Stop all OCR MCP service processes"
+	@echo ""
+	@echo "Clean Commands:"
+	@echo "  make clean            - Clean generated files"
 	@echo ""
 
 # Windows PowerShell UTF-8 编码设置
@@ -59,116 +73,103 @@ endif
 # ==================== 检查环境 ====================
 
 check-python:
-	@$(SET_UTF8)
-	@echo "🔍 检查Python环境..."
-	@python --version >nul 2>&1 || (echo "❌ 错误: 未找到Python，请先安装Python 3.8+" && exit 1)
+	@echo "[CHECK] Checking Python environment..."
+	@python --version >nul 2>&1 || (echo "[ERROR] Python not found, please install Python 3.8+" && exit 1)
 	@python --version
-	@echo "✅ Python环境检查通过"
+	@echo "[OK] Python environment check passed"
 	@echo ""
 
 check-pip: check-python
-	@$(SET_UTF8)
-	@echo "🔍 检查pip..."
-	@python -m pip --version >nul 2>&1 || (echo "❌ 错误: 未找到pip，请先安装pip" && exit 1)
-	@echo "✅ pip检查通过"
+	@echo "[CHECK] Checking pip..."
+	@python -m pip --version >nul 2>&1 || (echo "[ERROR] pip not found, please install pip" && exit 1)
+	@echo "[OK] pip check passed"
 	@echo ""
 
 # ==================== 安装命令 ====================
 
 install: check-pip
-	@$(SET_UTF8)
-	@echo "📦 安装依赖..."
-	@echo "正在安装依赖包，这可能需要几分钟..."
+	@echo "[INSTALL] Installing dependencies..."
+	@echo "[INFO] Installing packages, this may take a few minutes..."
 	@python -m pip install --upgrade pip -q
 	@python -m pip install -r requirements.txt
 	@echo ""
-	@echo "✅ 依赖安装完成"
+	@echo "[OK] Dependencies installation complete"
 	@echo ""
 
 install-dev: install
-	@$(SET_UTF8)
-	@echo "📦 安装开发依赖..."
-	@python -m pip install colorama -q || echo "⚠️  colorama安装失败（可选依赖）"
-	@echo "✅ 开发依赖安装完成"
+	@echo "[INSTALL-DEV] Installing development dependencies..."
+	@python -m pip install colorama -q || echo "[WARN] colorama installation failed (optional dependency)"
+	@echo "[OK] Development dependencies installation complete"
 	@echo ""
 
 # ==================== 验证命令 ====================
 
 verify: install
-	@$(SET_UTF8)
-	@echo "🧪 验证安装..."
-	@python -c "import mcp; import paddleocr; print('✅ 核心依赖验证通过')" 2>nul || (echo "⚠️  警告: 部分依赖可能未正确安装" && exit 0)
-	@echo "✅ 验证完成"
+	@echo "[VERIFY] Verifying installation..."
+	@python scripts/verify.py
+	@echo "[OK] Verification complete"
 	@echo ""
 
 # ==================== 生成配置 ====================
 
 generate-config:
-	@$(SET_UTF8)
-	@echo "📝 生成配置文件..."
-	@python -c "import json, sys, os; from pathlib import Path; script_dir = Path('$(CURDIR)'); server_file = script_dir / 'mcp_ocr_server.py'; server_path = str(server_file).replace('\\\\', '/') if os.name == 'nt' else str(server_file); script_path = str(script_dir).replace('\\\\', '/') if os.name == 'nt' else str(script_dir); config = {'mcpServers': {'ocr-service': {'command': 'python', 'args': [server_path], 'env': {'PYTHONPATH': script_path}}}}; config_file = script_dir / 'config_template.json'; f = open(config_file, 'w', encoding='utf-8'); json.dump(config, f, indent=2, ensure_ascii=False); f.close(); print('✅ 配置文件模板已生成: config_template.json')"
+	@echo "[CONFIG] Generating configuration file..."
+	@python scripts/generate_config.py
 	@echo ""
 
 # ==================== 测试命令 ====================
 
 test: verify
-	@$(SET_UTF8)
-	@echo "🧪 测试MCP服务器..."
-	@echo "运行语法检查..."
-	@python -m py_compile mcp_ocr_server.py || (echo "❌ 语法检查失败" && exit 1)
-	@echo "✅ 语法检查通过"
-	@echo "运行导入测试..."
-	@python -c "from mcp.server.fastmcp import FastMCP; print('✅ MCP导入测试通过')" 2>nul || (echo "⚠️  MCP未安装，请先运行 make install" && exit 1)
-	@echo "✅ 测试完成"
+	@echo "[TEST] Testing MCP server..."
+	@echo "[CHECK] Running syntax check..."
+	@python -m py_compile mcp_ocr_server.py || (echo "[ERROR] Syntax check failed" && exit 1)
+	@echo "[OK] Syntax check passed"
+	@echo "[CHECK] Running import test..."
+	@python -c "from mcp.server.fastmcp import FastMCP; print('[OK] MCP import test passed')" 2>nul || (echo "[WARN] MCP not installed, please run 'make install' first" && exit 1)
+	@echo "[OK] Test complete"
 	@echo ""
 
-# ==================== 运行命令 ====================
 
-run:
-	@$(SET_UTF8)
-	@echo "🚀 启动MCP服务器..."
-	@echo "提示: 如果看到服务器启动信息，说明配置正确"
-	@echo "按 Ctrl+C 可以停止服务器"
+start: install verify
+	@echo ""
+	@echo "[START] Starting server for testing..."
+	@echo "[INFO] Note: In production, Cursor will start the server automatically"
+	@echo "[INFO] Press Ctrl+C to stop the server"
 	@echo ""
 	@python mcp_ocr_server.py
 
-# ==================== 完整工作流 ====================
+# ==================== 状态和日志命令 ====================
 
-ready: install verify generate-config
-	@$(SET_UTF8)
-	@echo ""
-	@echo "✅ =================================="
-	@echo "✅ OCR MCP服务准备就绪！"
-	@echo "✅ =================================="
-	@echo ""
-	@echo "📊 已完成:"
-	@echo "  ✓ 安装所有依赖"
-	@echo "  ✓ 验证安装"
-	@echo "  ✓ 生成配置文件模板"
-	@echo ""
-	@echo "🚀 下一步:"
-	@echo "  1. 查看生成的配置文件: config_template.json"
-	@echo "  2. 将配置添加到Cursor的MCP设置中（参考配置指南.md）"
-	@echo "  3. 重启Cursor"
-	@echo "  4. 运行 make start 测试服务器"
+status:
+	@echo "[STATUS] Checking OCR MCP service status..."
+	@python scripts/check_status.py
 	@echo ""
 
-start: ready
+logs:
+	@echo "[LOGS] Viewing recent log entries..."
+	@python scripts/view_logs.py 50
 	@echo ""
-	@echo "🚀 启动服务器..."
+
+logs-tail:
+	@echo "[LOGS] Tailing log file..."
+	@python scripts/view_logs.py tail
+
+# ==================== 服务控制命令 ====================
+
+stop:
+	@echo "[STOP] Stopping OCR MCP service..."
+	@python scripts/stop_service.py
 	@echo ""
-	@$(MAKE) run
 
 # ==================== 清理命令 ====================
 
 clean:
-	@$(SET_UTF8)
-	@echo "🧹 清理生成的文件..."
+	@echo "[CLEAN] Cleaning generated files..."
 	@if exist config_template.json del /f /q config_template.json 2>nul || rm -f config_template.json
 	@if exist __pycache__ rmdir /s /q __pycache__ 2>nul || rm -rf __pycache__
 	@if exist *.pyc del /f /q *.pyc 2>nul || rm -f *.pyc
 	@if exist .pytest_cache rmdir /s /q .pytest_cache 2>nul || rm -rf .pytest_cache
 	@if exist .mypy_cache rmdir /s /q .mypy_cache 2>nul || rm -rf .mypy_cache
-	@echo "✅ 清理完成"
+	@echo "[OK] Cleanup complete"
 	@echo ""
 

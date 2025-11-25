@@ -41,6 +41,9 @@ Thumbs.db
 config_template.json
 *.log
 
+# Logs directory
+logs/
+
 # PaddleOCR models (downloaded automatically)
 .paddleocr/
 

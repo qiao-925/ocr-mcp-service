@@ -16,8 +16,12 @@ PADDLEOCR_LANG: str = get_env("PADDLEOCR_LANG", "ch")
 # DeepSeek OCR configuration
 DEEPSEEK_MODEL_NAME: str = get_env("DEEPSEEK_MODEL_NAME", "deepseek-ai/deepseek-ocr")
 # Default to CUDA if available, otherwise CPU
-import torch
-DEEPSEEK_DEVICE: str = get_env("DEEPSEEK_DEVICE", "cuda" if torch.cuda.is_available() else "cpu")
+try:
+    import torch
+    DEEPSEEK_DEVICE: str = get_env("DEEPSEEK_DEVICE", "cuda" if torch.cuda.is_available() else "cpu")
+except ImportError:
+    # torch not installed, default to CPU
+    DEEPSEEK_DEVICE: str = get_env("DEEPSEEK_DEVICE", "cpu")
 # Hugging Face mirror for faster download in China
 HF_ENDPOINT: Optional[str] = get_env("HF_ENDPOINT")  # e.g., "https://hf-mirror.com"
 HF_MIRROR: Optional[str] = get_env("HF_MIRROR")  # Alternative mirror setting

@@ -1,0 +1,372 @@
+# OCR MCP Service 完整文档
+
+> **版本**: 0.1.0  
+> **最后更新**: 2025-01-27  
+> **状态**: ✅ 已完成
+
+---
+
+## 📋 项目概述
+
+OCR MCP Service 是一个统一的 OCR 服务，通过 MCP (Model Context Protocol) 提供多种 OCR 引擎支持。
+
+### 核心特性
+
+- ✅ 统一服务架构，单一 Entry Point
+- ✅ 多引擎支持（PaddleOCR、EasyOCR、DeepSeek OCR、paddleocr-mcp）
+- ✅ 模块化设计，易于扩展
+- ✅ 完善的错误处理和日志记录
+- ✅ 进度跟踪和技术分析
+
+### 技术栈
+
+- **Python**: 3.10+（推荐 3.11）
+- **包管理**: uv（现代化 Python 包管理器）
+- **MCP 协议**: Model Context Protocol（基于 stdio JSON-RPC）
+- **框架**: FastMCP
+
+---
+
+## 🚀 快速开始
+
+### 安装
+
+```bash
+# 使用 uv（推荐）
+uv venv
+uv pip install -e ".[paddleocr]"  # 安装 PaddleOCR 引擎
+
+# 或使用 pip
+pip install -e ".[paddleocr]"
+```
+
+### 配置 Cursor
+
+```bash
+# 自动配置到 Cursor
+python scripts/setup_cursor.py
+
+# 或手动添加到 ~/.cursor/mcp.json
+{
+  "mcpServers": {
+    "ocr-service": {
+      "command": "ocr-mcp-server",
+      "args": []
+    }
+  }
+}
+```
+
+### 使用
+
+在 Cursor 中直接调用工具：
+
+```
+请使用 recognize_image_paddleocr 工具识别图片：图片路径
+```
+
+---
+
+## 📖 API 参考
+
+### 工具列表
+
+#### 1. recognize_image_paddleocr
+
+使用 PaddleOCR 引擎识别图片中的文字（推荐）。
+
+**参数**:
+- `image_path` (str): 图片文件路径
+- `lang` (str, 可选): 语言代码，默认为 "ch"
+
+**返回**:
+```json
+{
+  "text": "识别的文字内容",
+  "boxes": [{"x1": 0.0, "y1": 0.0, "x2": 100.0, "y2": 50.0}],
+  "confidence": 0.95,
+  "engine": "paddleocr",
+  "processing_time": 1.23,
+  "analysis": "技术解析...",
+  "progress_history": [...]
+}
+```
+
+#### 2. recognize_image_easyocr
+
+使用 EasyOCR 引擎识别图片中的文字（支持80+语言）。
+
+**参数**:
+- `image_path` (str): 图片文件路径
+- `languages` (str, 可选): 逗号分隔的语言代码，默认为 "ch_sim,en"
+
+**返回**: 同 `recognize_image_paddleocr`
+
+#### 3. recognize_image_paddleocr_mcp
+
+使用 paddleocr-mcp 引擎识别图片中的文字。
+
+**参数**:
+- `image_path` (str): 图片文件路径
+
+**返回**: 同 `recognize_image_paddleocr`
+
+#### 4. recognize_image_deepseek
+
+使用 DeepSeek OCR 引擎识别图片中的文字（⚠️ 不推荐，模型过大 ~7.8GB）。
+
+**参数**:
+- `image_path` (str): 图片文件路径
+
+**返回**: 同 `recognize_image_paddleocr`（但 `boxes` 为空）
+
+#### 5. get_recent_logs
+
+获取 OCR 服务的最近日志记录。
+
+**参数**:
+- `lines` (int, 可选): 返回的日志行数，默认 100，最大 1000
+- `level` (str, 可选): 过滤日志级别（debug/info/warning/error）
+- `engine` (str, 可选): 过滤引擎名称
+- `search` (str, 可选): 搜索关键词
+
+**返回**:
+```json
+{
+  "logs": [
+    {
+      "timestamp": "2025-01-27 20:00:00",
+      "level": "info",
+      "logger": "PaddleOCREngine",
+      "message": "OCR识别完成",
+      "progress": 100.0,
+      "stage": "完成"
+    }
+  ],
+  "total": 100,
+  "filtered": 50
+}
+```
+
+### 错误处理
+
+如果发生错误，返回结果中会包含 `error` 字段：
+
+```json
+{
+  "error": "错误信息",
+  "text": "",
+  "boxes": [],
+  "confidence": 0.0,
+  "engine": "engine_name",
+  "processing_time": 0.0
+}
+```
+
+---
+
+## 🏗️ 架构设计
+
+### 核心组件
+
+1. **MCP 服务器** (`mcp_server.py`)
+   - FastMCP 框架
+   - 统一的服务器实例
+   - MCP 日志通知支持
+
+2. **工具定义** (`tools.py`)
+   - 5 个 MCP 工具函数
+   - 统一的错误处理
+
+3. **OCR 引擎** (`ocr_engine.py`)
+   - 抽象基类 `OCREngine`
+   - 4 个实现：`PaddleOCREngine`, `EasyOCREngine`, `DeepSeekOCREngine`, `PaddleOCRMCPEngine`
+   - 工厂模式管理引擎实例（单例）
+
+4. **支持模块**
+   - `logger.py`: 日志系统（文件日志 + MCP 通知）
+   - `progress_tracker.py`: 进度跟踪
+   - `analysis_generator.py`: 技术分析生成器
+   - `models.py`: 数据模型（OCRResult, BoundingBox）
+   - `config.py`: 配置管理（环境变量）
+   - `utils.py`: 工具函数（图像验证）
+
+### 数据流
+
+```
+Agent Request
+    ↓
+MCP Tool (tools.py)
+    ↓
+Image Validation (utils.py)
+    ↓
+Engine Factory (ocr_engine.py)
+    ↓
+OCR Engine Implementation
+    ↓
+Progress Tracking + Analysis Generation
+    ↓
+OCRResult
+    ↓
+Agent Response
+```
+
+### 设计原则
+
+1. **统一接口**: 所有引擎实现相同的接口
+2. **延迟加载**: 引擎在首次使用时加载
+3. **错误处理**: 统一的错误处理和返回格式
+4. **可选依赖**: 引擎作为可选依赖，按需安装
+
+---
+
+## 🎯 引擎推荐
+
+### ✅ 推荐使用
+
+**PaddleOCR**（最推荐）
+- 中文识别效果好
+- 支持多语言
+- 提供文本和边界框
+- 模型适中，下载快速
+- 安装: `pip install -e ".[paddleocr]"`
+
+**EasyOCR**（多语言场景）
+- 支持 80+ 语言
+- 易于使用
+- 安装: `pip install -e ".[easyocr]"`
+
+**paddleocr-mcp**（官方 MCP 实现）
+- 与 PaddleOCR 功能类似
+- 保持兼容性
+
+### ⚠️ 暂不推荐
+
+**DeepSeek OCR**
+- 模型文件过大（~7.8GB）
+- 下载时间长
+- 存储占用大
+- PaddleOCR 已能满足大部分需求
+
+---
+
+## ⚙️ 配置
+
+### 环境变量
+
+- `PADDLEOCR_LANG`: PaddleOCR 语言代码（默认: "ch"）
+- `DEEPSEEK_MODEL_NAME`: DeepSeek OCR 模型名称（默认: "deepseek-ai/deepseek-ocr"）
+- `DEEPSEEK_DEVICE`: DeepSeek OCR 设备（默认: "cpu" 或 "cuda"）
+- `PRELOAD_ENGINES`: 预加载的引擎列表（逗号分隔，如 "paddleocr,easyocr"）
+- `LOG_LEVEL`: 日志级别（默认: "INFO"）
+- `LOG_FILE`: 日志文件路径（默认: "logs/ocr_service.log"）
+
+### MCP 配置
+
+配置文件位置：`~/.cursor/mcp.json`
+
+```json
+{
+  "mcpServers": {
+    "ocr-service": {
+      "command": "ocr-mcp-server",
+      "args": []
+    }
+  }
+}
+```
+
+---
+
+## 🔧 故障排查
+
+### 工具不可用
+
+1. **检查配置**:
+   ```bash
+   python scripts/check_mcp_config.py
+   ```
+
+2. **重新配置**:
+   ```bash
+   python scripts/setup_cursor.py --force
+   ```
+
+3. **重启 Cursor**: 配置更改后需要完全重启 Cursor
+
+### 引擎加载失败
+
+1. **检查依赖安装**:
+   ```bash
+   pip list | grep paddleocr
+   ```
+
+2. **重新安装**:
+   ```bash
+   pip install -e ".[paddleocr]"
+   ```
+
+3. **查看日志**:
+   ```bash
+   # 使用 get_recent_logs 工具查看日志
+   # 或查看日志文件
+   cat logs/ocr_service.log
+   ```
+
+### 常见错误
+
+- **ImportError**: 引擎依赖未安装，使用 `pip install -e ".[engine_name]"` 安装
+- **FileNotFoundError**: 图片路径错误，使用绝对路径或相对于工作目录的路径
+- **MemoryError**: 内存不足，尝试使用较小的引擎或减少并发
+
+---
+
+## 📁 项目结构
+
+```
+ocr-mcp-service/
+├── src/ocr_mcp_service/     # 核心代码
+│   ├── __main__.py          # Entry Point
+│   ├── mcp_server.py        # MCP 服务器
+│   ├── tools.py             # MCP 工具定义
+│   ├── ocr_engine.py        # OCR 引擎实现
+│   ├── logger.py            # 日志系统
+│   ├── progress_tracker.py  # 进度跟踪
+│   ├── analysis_generator.py # 技术分析
+│   ├── models.py            # 数据模型
+│   ├── config.py            # 配置管理
+│   └── utils.py             # 工具函数
+├── scripts/                 # 工具脚本
+├── tests/                   # 测试代码
+├── docs/                    # 文档（本文档）
+└── logs/                    # 日志文件
+```
+
+---
+
+## 🧪 测试
+
+```bash
+# 运行所有测试
+pytest
+
+# 运行特定测试
+pytest tests/test_engines.py
+
+# 测试特定引擎
+python scripts/verify_engines.py
+```
+
+---
+
+## 📚 参考资源
+
+- [FastMCP 文档](https://github.com/jlowin/fastmcp)
+- [PaddleOCR 文档](https://github.com/PaddlePaddle/PaddleOCR)
+- [MCP 协议规范](https://modelcontextprotocol.io/)
+- [EasyOCR 文档](https://github.com/JaidedAI/EasyOCR)
+
+---
+
+**文档版本**: 0.1.0  
+**最后更新**: 2025-01-27

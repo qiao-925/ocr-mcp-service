@@ -1,10 +1,14 @@
 {
   "mcpServers": {
     "ocr-service": {
-      "command": "/home/qiao/Desktop/Git Repo/ocr-mcp-service/.venv/bin/ocr-mcp-server",
-      "args": [],
-      "env": {}
+      "command": "ocr-mcp-server",
+      "args": []
     }
   }
 }
+
+
+
+
+
 

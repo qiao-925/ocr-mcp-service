@@ -1,185 +1,280 @@
-"""工具函数模块。
+"""MCP tool definitions."""
 
-包含OCR识别函数和结果格式化。
-"""
-
-import logging
+import re
 from pathlib import Path
-from typing import Any
-
-from ocr_mcp_service.config import default_config
-from ocr_mcp_service.config_manager import MCPConfigManager
-from ocr_mcp_service.ocr_engine import OCREngine
-from ocr_mcp_service.utils import validate_image_path
-
-logger = logging.getLogger(__name__)
-
-# 全局配置管理器实例
-_config_manager = MCPConfigManager()
+from typing import Optional
+from .mcp_server import mcp
+from .ocr_engine import OCREngineFactory
+from .utils import validate_image
+from .config import LOG_FILE
+from .logger import get_logger
 
 
-# 注意：recognize_text_from_path的@mcp.tool()装饰器在mcp_server.py中注册
-
-
-def recognize_text_from_path(image_path: str) -> dict[str, Any]:
-    """从图片文件路径识别文字。
-
-    使用PaddleOCR 3.x（PP-OCRv5_server模型）识别图片中的文字，
-    返回结构化结果，包括文本、置信度和位置信息。
-
+@mcp.tool()
+def recognize_image_paddleocr(image_path: str, lang: str = "ch") -> dict:
+    """
+    Recognize text in an image using PaddleOCR engine.
+    
     Args:
-        image_path: 图片文件的路径（绝对路径或相对路径）
-
+        image_path: Path to the image file
+        lang: Language code (default: 'ch' for Chinese)
+    
     Returns:
-        包含识别结果的字典：
-        - success: 是否成功
-        - text: 识别出的完整文本（换行符分隔）
-        - lines: 按行组织的识别结果列表，每行包含：
-            - text: 识别的文本
-            - confidence: 置信度（0-1）
-            - bbox: 边界框坐标 [[x1, y1], [x2, y2], [x3, y3], [x4, y4]]
-        - line_count: 识别到的文本行数
-        - error: 错误信息（如果失败）
-
-    Example:
-        >>> result = recognize_text_from_path("/path/to/image.jpg")
-        >>> if result["success"]:
-        ...     print(result["text"])
-        ...     print(f"识别到 {result['line_count']} 行文字")
+        OCR result with text, bounding boxes, confidence, processing time, and technical analysis
     """
     try:
-        # 验证文件路径
-        is_valid, error_msg, path = validate_image_path(image_path)
-        if not is_valid or path is None:
-            logger.error(error_msg)
-            return {
-                "success": False,
-                "error": error_msg,
-                "text": "",
-                "lines": [],
-                "line_count": 0,
-            }
-
-        logger.info(f"开始OCR识别: {image_path}")
-
-        # 获取OCR实例并执行识别
-        ocr = OCREngine.get_instance()
-        # PaddleOCR 3.x使用predict方法，返回OCRResult对象列表
-        result = ocr.predict(str(path))
-
-        # 解析识别结果
-        full_text, lines = OCREngine.parse_result(result)
-
-        logger.info(f"OCR识别完成，共识别 {len(lines)} 个文本块")
-
-        return {
-            "success": True,
-            "text": full_text,
-            "lines": lines,
-            "line_count": len(lines),
-        }
-
-    except FileNotFoundError as e:
-        error_msg = f"文件未找到: {image_path}"
-        logger.error(error_msg, exc_info=True)
-        return {
-            "success": False,
-            "error": error_msg,
-            "text": "",
-            "lines": [],
-            "line_count": 0,
-        }
-    except PermissionError as e:
-        error_msg = f"文件访问权限不足: {image_path}"
-        logger.error(error_msg, exc_info=True)
-        return {
-            "success": False,
-            "error": error_msg,
-            "text": "",
-            "lines": [],
-            "line_count": 0,
-        }
-    except RuntimeError as e:
-        error_msg = f"OCR引擎错误: {str(e)}"
-        logger.error(error_msg, exc_info=True)
-        return {
-            "success": False,
-            "error": error_msg,
-            "text": "",
-            "lines": [],
-            "line_count": 0,
-        }
+        # Validate image
+        validate_image(image_path)
+        
+        # Get engine and recognize
+        engine = OCREngineFactory.get_engine("paddleocr")
+        result = engine.recognize_image(image_path, lang=lang)
+        
+        return result.to_dict()
     except Exception as e:
-        error_msg = f"OCR识别失败: {str(e)}"
-        logger.error(error_msg, exc_info=True)
         return {
-            "success": False,
-            "error": error_msg,
-            "text": "",
-            "lines": [],
-            "line_count": 0,
-        }
-
-
-def get_mcp_config_info() -> dict[str, Any]:
-    """获取MCP配置信息。
-
-    检查当前Cursor MCP配置状态，包括：
-    - 配置文件位置
-    - OCR服务是否已配置
-    - 当前配置内容
-    - 推荐配置
-
-    Returns:
-        包含配置信息的字典：
-        - project_root: 项目根目录
-        - config_status: 配置状态
-        - possible_config_paths: 可能的配置文件路径列表
-        - entry_point_path: Entry Point路径
-        - venv_python_path: 虚拟环境Python路径
-        - entry_point_exists: Entry Point是否存在
-        - venv_python_exists: 虚拟环境Python是否存在
-    """
-    try:
-        info = _config_manager.get_config_info()
-        logger.info("MCP配置信息查询成功")
-        return {
-            "success": True,
-            **info,
-        }
-    except Exception as e:
-        logger.error(f"获取配置信息失败: {e}", exc_info=True)
-        return {
-            "success": False,
             "error": str(e),
+            "text": "",
+            "boxes": [],
+            "confidence": 0.0,
+            "engine": "paddleocr",
+            "processing_time": 0.0,
         }
 
 
-def auto_configure_mcp(force: bool = False) -> dict[str, Any]:
-    """自动配置MCP服务。
-
-    自动检测并配置Cursor MCP服务，如果配置不存在或无效则自动创建/更新。
-
+@mcp.tool()
+def recognize_image_deepseek(image_path: str) -> dict:
+    """
+    Recognize text in an image using DeepSeek OCR engine.
+    
+    NOTE: This engine is NOT RECOMMENDED due to large model size (~7.8GB).
+    Use recognize_image_paddleocr or recognize_image_paddleocr_mcp instead.
+    
     Args:
-        force: 是否强制更新现有配置，默认False
-
+        image_path: Path to the image file
+    
     Returns:
-        配置结果字典：
-        - success: 是否成功
-        - action: 执行的操作（created/updated/skipped/failed）
-        - config_file: 配置文件路径
-        - message: 结果消息
+        OCR result with text, confidence, and processing time
     """
     try:
-        result = _config_manager.auto_configure(force=force)
-        logger.info(f"MCP自动配置完成: {result['action']}")
-        return result
+        # Validate image
+        validate_image(image_path)
+        
+        # Get engine and recognize
+        engine = OCREngineFactory.get_engine("deepseek")
+        result = engine.recognize_image(image_path)
+        
+        return result.to_dict()
     except Exception as e:
-        logger.error(f"自动配置失败: {e}", exc_info=True)
         return {
-            "success": False,
-            "action": "failed",
-            "message": f"自动配置失败: {str(e)}",
-            "config_file": None,
+            "error": str(e),
+            "text": "",
+            "boxes": [],
+            "confidence": 0.0,
+            "engine": "deepseek",
+            "processing_time": 0.0,
+        }
+
+
+@mcp.tool()
+def recognize_image_paddleocr_mcp(image_path: str) -> dict:
+    """
+    Recognize text in an image using paddleocr-mcp engine (subprocess).
+    
+    Args:
+        image_path: Path to the image file
+    
+    Returns:
+        OCR result with text, bounding boxes, confidence, and processing time
+    """
+    try:
+        # Validate image
+        validate_image(image_path)
+        
+        # Get engine and recognize
+        engine = OCREngineFactory.get_engine("paddleocr_mcp")
+        result = engine.recognize_image(image_path)
+        
+        return result.to_dict()
+    except Exception as e:
+        return {
+            "error": str(e),
+            "text": "",
+            "boxes": [],
+            "confidence": 0.0,
+            "engine": "paddleocr_mcp",
+            "processing_time": 0.0,
+        }
+
+
+@mcp.tool()
+def recognize_image_easyocr(image_path: str, languages: str = "ch_sim,en") -> dict:
+    """
+    Recognize text in an image using EasyOCR engine.
+    
+    EasyOCR supports 80+ languages and is easy to use. Good for multilingual scenarios.
+    
+    Args:
+        image_path: Path to the image file
+        languages: Comma-separated language codes (default: 'ch_sim,en' for Chinese Simplified and English).
+                  Common codes: 'en' (English), 'ch_sim' (Chinese Simplified), 'ch_tra' (Chinese Traditional),
+                  'ja' (Japanese), 'ko' (Korean), 'fr' (French), 'de' (German), etc.
+    
+    Returns:
+        OCR result with text, bounding boxes, confidence, and processing time
+    """
+    try:
+        # Validate image
+        validate_image(image_path)
+        
+        # Parse languages
+        lang_list = [lang.strip() for lang in languages.split(',') if lang.strip()]
+        
+        # Get engine with specified languages
+        engine = OCREngineFactory.get_engine("easyocr", languages=lang_list)
+        result = engine.recognize_image(image_path)
+        
+        return result.to_dict()
+    except Exception as e:
+        return {
+            "error": str(e),
+            "text": "",
+            "boxes": [],
+            "confidence": 0.0,
+            "engine": "easyocr",
+            "processing_time": 0.0,
+        }
+
+
+@mcp.tool()
+def get_recent_logs(
+    lines: int = 100,
+    level: Optional[str] = None,
+    engine: Optional[str] = None,
+    search: Optional[str] = None
+) -> dict:
+    """
+    Get recent log entries from the OCR service log file.
+    
+    This tool provides a user-friendly way to view logs when MCP tools are being used.
+    
+    Args:
+        lines: Number of recent log lines to return (default: 100, max: 1000)
+        level: Filter by log level (debug/info/warning/error). Case insensitive.
+        engine: Filter by OCR engine name (paddleocr/easyocr/deepseek/paddleocr_mcp). Case insensitive.
+        search: Search for keyword in log messages. Case insensitive.
+    
+    Returns:
+        Dictionary containing:
+        - logs: List of log entries matching the filters
+        - total: Total number of log entries read
+        - filtered: Number of entries after filtering
+    """
+    try:
+        log_file = Path(LOG_FILE)
+        if not log_file.exists():
+            return {
+                "logs": [],
+                "total": 0,
+                "filtered": 0,
+                "message": f"Log file not found: {LOG_FILE}"
+            }
+        
+        # Read log file
+        max_lines = min(lines, 1000)  # Cap at 1000 lines
+        log_entries = []
+        
+        try:
+            with open(log_file, "r", encoding="utf-8") as f:
+                all_lines = f.readlines()
+                # Get last N lines
+                recent_lines = all_lines[-max_lines:] if len(all_lines) > max_lines else all_lines
+        except Exception as e:
+            logger = get_logger("tools")
+            logger.error(f"Failed to read log file: {e}")
+            return {
+                "logs": [],
+                "total": 0,
+                "filtered": 0,
+                "error": str(e)
+            }
+        
+        # Parse log entries
+        log_pattern = re.compile(
+            r'\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\] (\w+) \[([^\]]+)\] (.+)'
+        )
+        
+        for line in recent_lines:
+            line = line.strip()
+            if not line:
+                continue
+            
+            match = log_pattern.match(line)
+            if match:
+                timestamp, log_level, logger_name, message = match.groups()
+                
+                # Extract progress info if present
+                progress = None
+                stage = None
+                if "progress=" in message:
+                    progress_match = re.search(r'progress=(\d+(?:\.\d+)?)%', message)
+                    if progress_match:
+                        progress = float(progress_match.group(1))
+                if "stage=" in message:
+                    stage_match = re.search(r'stage=([^|]+)', message)
+                    if stage_match:
+                        stage = stage_match.group(1).strip()
+                
+                # Apply filters
+                if level and log_level.upper() != level.upper():
+                    continue
+                
+                if engine:
+                    logger_lower = logger_name.lower()
+                    engine_lower = engine.lower()
+                    if engine_lower not in logger_lower:
+                        continue
+                
+                if search and search.lower() not in message.lower():
+                    continue
+                
+                log_entry = {
+                    "timestamp": timestamp,
+                    "level": log_level,
+                    "logger": logger_name,
+                    "message": message,
+                }
+                
+                if progress is not None:
+                    log_entry["progress"] = progress
+                if stage:
+                    log_entry["stage"] = stage
+                
+                log_entries.append(log_entry)
+            else:
+                # Handle non-standard log format
+                if search and search.lower() not in line.lower():
+                    continue
+                log_entries.append({
+                    "timestamp": "",
+                    "level": "UNKNOWN",
+                    "logger": "",
+                    "message": line,
+                })
+        
+        return {
+            "logs": log_entries,
+            "total": len(recent_lines),
+            "filtered": len(log_entries)
+        }
+        
+    except Exception as e:
+        logger = get_logger("tools")
+        logger.error(f"Error reading logs: {e}", exc_info=True)
+        return {
+            "logs": [],
+            "total": 0,
+            "filtered": 0,
+            "error": str(e)
         }
 

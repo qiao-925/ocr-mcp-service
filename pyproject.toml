@@ -1,34 +1,73 @@
 [project]
 name = "ocr-mcp-service"
 version = "0.1.0"
-description = "OCR MCP服务器 - 基于PaddleOCR 3.x的图片文字识别服务"
+description = "Unified OCR MCP service supporting multiple OCR engines"
+readme = "README.md"
 requires-python = ">=3.10"
+authors = [
+    {name = "OCR MCP Service Team"}
+]
+license = {text = "MIT"}
+keywords = ["ocr", "mcp", "paddleocr", "deepseek"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
 dependencies = [
-    "mcp>=1.0.0",
-    "numpy>=1.24.0",
-    "paddleocr>=3.0.0",
-    "paddleocr-mcp>=0.3.0",
-    "paddlepaddle>=3.0.0",
+    "fastmcp>=0.9.0",
     "pillow>=10.0.0",
 ]
 
 [project.optional-dependencies]
+paddleocr = [
+    "paddleocr>=3.0.0",
+    "paddlepaddle>=2.6.0",
+]
+deepseek = [
+    "transformers==4.46.3",  # DeepSeek OCR requires specific version
+    "tokenizers==0.20.3",    # Required by DeepSeek OCR
+    "torch>=2.0.0",
+    "einops",
+    "addict",
+    "easydict",
+]
+tesseract = [
+    "pytesseract>=0.3.10",
+]
+easyocr = [
+    "easyocr>=1.7.0",
+]
 dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
     "black>=23.0.0",
     "ruff>=0.1.0",
-    "mypy>=1.0.0",
 ]
-test = [
-    "pytest>=7.0.0",
-    "pytest-cov>=4.0.0",
-]
+
+[project.scripts]
+ocr-mcp-server = "ocr_mcp_service.__main__:main"
+ocr-tail-logs = "scripts.tail_logs:main"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-[tool.hatch.build.targets.wheel]
-packages = ["src/ocr_mcp_service"]
+[tool.black]
+line-length = 100
+target-version = ['py310']
 
-[project.scripts]
-ocr-mcp-server = "ocr_mcp_service.__main__:main"
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+
+
+
+
+

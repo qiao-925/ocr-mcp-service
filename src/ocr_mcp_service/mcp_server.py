@@ -1,31 +1,58 @@
-"""MCP服务器主文件。
+"""MCP server setup."""
 
-配置FastMCP和工具注册。
-"""
+from fastmcp import FastMCP
+from typing import Optional, Callable
 
-import logging
+# Create MCP server instance
+mcp = FastMCP("OCR MCP Service")
 
-from mcp.server.fastmcp import FastMCP
+# MCP logging notification callback
+_mcp_log_callback: Optional[Callable[[str, str, dict], None]] = None
 
-logger = logging.getLogger(__name__)
 
-# 创建FastMCP服务器实例
-mcp = FastMCP("OCR Service")
+def set_mcp_log_callback(callback: Callable[[str, str, dict], None]):
+    """Set callback for sending MCP log notifications.
+    
+    Args:
+        callback: Function to send MCP notifications.
+                 Should accept (level: str, logger: str, data: dict) parameters.
+    """
+    global _mcp_log_callback
+    _mcp_log_callback = callback
 
-# 延迟导入工具函数以避免循环导入
-# 工具函数会在首次使用时导入
-def _register_tools() -> None:
-    """注册所有工具函数。"""
-    from ocr_mcp_service.tools import (
-        auto_configure_mcp,
-        get_mcp_config_info,
-        recognize_text_from_path,
-    )
 
-    mcp.tool()(recognize_text_from_path)
-    mcp.tool()(get_mcp_config_info)
-    mcp.tool()(auto_configure_mcp)
+def send_mcp_log(level: str, logger: str, data: dict):
+    """Send MCP log notification.
+    
+    Args:
+        level: Log level (debug, info, warning, error, etc.)
+        logger: Logger name
+        data: Log data dictionary
+    """
+    if _mcp_log_callback:
+        try:
+            _mcp_log_callback(level=level, logger=logger, data=data)
+        except Exception:
+            # Silently ignore errors to avoid breaking the app
+            pass
 
-# 立即注册工具
-_register_tools()
+
+# Try to enable logging capability if FastMCP supports it
+# Note: FastMCP may not directly support logging capability declaration,
+# but we can still send notifications via the callback mechanism
+try:
+    # Check if FastMCP has capabilities support
+    if hasattr(mcp, "capabilities"):
+        # Declare logging capability
+        if not hasattr(mcp.capabilities, "logging"):
+            mcp.capabilities["logging"] = {}
+except (AttributeError, TypeError):
+    # FastMCP may not support capabilities directly
+    # We'll handle logging via notifications instead
+    pass
+
+
+
+
+
 

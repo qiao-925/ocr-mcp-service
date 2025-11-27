@@ -20,12 +20,11 @@ wheels/
 .installed.cfg
 *.egg
 
-# 虚拟环境
-.venv/
+# Virtual environments
 venv/
-ENV/
 env/
-.ENV
+ENV/
+.venv
 
 # IDE
 .vscode/
@@ -34,25 +33,39 @@ env/
 *.swo
 *~
 
-# 测试和覆盖率
+# Cursor
+.cursor/
+.cursorrules
+
+# Environment variables
+.env
+.env.local
+
+# Testing
 .pytest_cache/
-.mypy_cache/
 .coverage
 htmlcov/
 .tox/
 
-# 环境变量
-.env
-.env.local
+# MCP config (user-specific)
+mcp_config.json
 
-# 日志
-*.log
-logs/
+# Models and cache
+*.pth
+*.pt
+.cache/
+models/
 
-# PaddleOCR模型缓存
-.paddleocr/
-
-# 操作系统
+# OS
 .DS_Store
 Thumbs.db
+
+# Logs
+logs/
+*.log
+
+
+
+
+
 

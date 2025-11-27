@@ -1,71 +1,40 @@
-"""配置管理模块。
+"""Configuration management for OCR MCP Service."""
 
-定义默认配置和配置加载逻辑。
-"""
-
-import logging
-from pathlib import Path
-from typing import Any
-
-logger = logging.getLogger(__name__)
+import os
+from typing import Optional
 
 
-class OCRConfig:
-    """OCR服务配置类。
-
-    Attributes:
-        use_angle_cls: 是否使用角度分类
-        lang: 识别语言（ch=中文，en=英文等）
-        log_dir: 日志目录
-        log_file: 日志文件路径
-        log_level: 日志级别
-    """
-
-    def __init__(
-        self,
-        use_angle_cls: bool = True,
-        lang: str = "ch",
-        log_dir: Path | str | None = None,
-        log_level: int = logging.INFO,
-    ) -> None:
-        """初始化配置。
-
-        Args:
-            use_angle_cls: 是否使用角度分类，默认True
-            lang: 识别语言，默认'ch'（中文）
-            log_dir: 日志目录，默认None（使用项目根目录下的logs）
-            log_level: 日志级别，默认INFO
-        """
-        self.use_angle_cls = use_angle_cls
-        self.lang = lang
-
-        # 设置日志目录
-        if log_dir is None:
-            # 默认使用项目根目录下的logs目录
-            project_root = Path(__file__).parent.parent.parent
-            self.log_dir = project_root / "logs"
-        else:
-            self.log_dir = Path(log_dir)
-
-        self.log_dir.mkdir(exist_ok=True)
-        self.log_file = self.log_dir / "mcp_ocr_server.log"
-        self.log_level = log_level
-
-    def to_dict(self) -> dict[str, Any]:
-        """转换为字典格式。
-
-        Returns:
-            配置字典
-        """
-        return {
-            "use_angle_cls": self.use_angle_cls,
-            "lang": self.lang,
-            "log_dir": str(self.log_dir),
-            "log_file": str(self.log_file),
-            "log_level": self.log_level,
-        }
+def get_env(key: str, default: Optional[str] = None) -> Optional[str]:
+    """Get environment variable."""
+    return os.getenv(key, default)
 
 
-# 默认配置实例
-default_config = OCRConfig()
+# PaddleOCR configuration
+PADDLEOCR_MODEL_DIR: Optional[str] = get_env("PADDLEOCR_MODEL_DIR")
+PADDLEOCR_LANG: str = get_env("PADDLEOCR_LANG", "ch")
+
+# DeepSeek OCR configuration
+DEEPSEEK_MODEL_NAME: str = get_env("DEEPSEEK_MODEL_NAME", "deepseek-ai/deepseek-ocr")
+# Default to CUDA if available, otherwise CPU
+import torch
+DEEPSEEK_DEVICE: str = get_env("DEEPSEEK_DEVICE", "cuda" if torch.cuda.is_available() else "cpu")
+# Hugging Face mirror for faster download in China
+HF_ENDPOINT: Optional[str] = get_env("HF_ENDPOINT")  # e.g., "https://hf-mirror.com"
+HF_MIRROR: Optional[str] = get_env("HF_MIRROR")  # Alternative mirror setting
+
+# Engine preloading
+PRELOAD_ENGINES: list[str] = [
+    engine.strip()
+    for engine in get_env("PRELOAD_ENGINES", "").split(",")
+    if engine.strip()
+]
+
+# Logging configuration
+LOG_LEVEL: str = get_env("LOG_LEVEL", "INFO")
+LOG_FILE: str = get_env("LOG_FILE", "logs/ocr_service.log")
+LOG_MAX_BYTES: int = int(get_env("LOG_MAX_BYTES", "10485760"))  # 10MB
+LOG_BACKUP_COUNT: int = int(get_env("LOG_BACKUP_COUNT", "5"))
+
+
+
 

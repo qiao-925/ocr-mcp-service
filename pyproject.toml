@@ -52,11 +52,13 @@ dev = [
 
 [project.scripts]
 ocr-mcp-server = "ocr_mcp_service.__main__:main"
-ocr-tail-logs = "scripts.tail_logs:main"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatchling.build]
+sources = ["src"]
 
 [tool.black]
 line-length = 100

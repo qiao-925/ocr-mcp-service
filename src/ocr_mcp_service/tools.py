@@ -22,7 +22,10 @@ def recognize_image_paddleocr(image_path: str, lang: str = "ch") -> dict:
     Returns:
         OCR result with text, bounding boxes, confidence, processing time, and technical analysis
     """
+    logger = get_logger("tools.recognize_image_paddleocr")
     try:
+        logger.info(f"MCP工具调用开始: recognize_image_paddleocr, 图片路径: {image_path}, 语言: {lang}")
+        
         # Validate image
         validate_image(image_path)
         
@@ -30,8 +33,24 @@ def recognize_image_paddleocr(image_path: str, lang: str = "ch") -> dict:
         engine = OCREngineFactory.get_engine("paddleocr")
         result = engine.recognize_image(image_path, lang=lang)
         
-        return result.to_dict()
+        # Log result summary
+        result_dict = result.to_dict()
+        text_length = len(result_dict.get("text", ""))
+        boxes_count = len(result_dict.get("boxes", []))
+        confidence = result_dict.get("confidence", 0.0)
+        processing_time = result_dict.get("processing_time", 0.0)
+        
+        logger.info(
+            f"MCP工具调用成功: recognize_image_paddleocr, "
+            f"识别文本长度: {text_length}字符, "
+            f"文本块数量: {boxes_count}, "
+            f"平均置信度: {confidence:.2f}, "
+            f"处理时间: {processing_time:.2f}秒"
+        )
+        
+        return result_dict
     except Exception as e:
+        logger.error(f"MCP工具调用失败: recognize_image_paddleocr, 错误: {e}", exc_info=True)
         return {
             "error": str(e),
             "text": "",
@@ -56,7 +75,10 @@ def recognize_image_deepseek(image_path: str) -> dict:
     Returns:
         OCR result with text, confidence, and processing time
     """
+    logger = get_logger("tools.recognize_image_deepseek")
     try:
+        logger.info(f"MCP工具调用开始: recognize_image_deepseek, 图片路径: {image_path}")
+        
         # Validate image
         validate_image(image_path)
         
@@ -64,8 +86,24 @@ def recognize_image_deepseek(image_path: str) -> dict:
         engine = OCREngineFactory.get_engine("deepseek")
         result = engine.recognize_image(image_path)
         
-        return result.to_dict()
+        # Log result summary
+        result_dict = result.to_dict()
+        text_length = len(result_dict.get("text", ""))
+        boxes_count = len(result_dict.get("boxes", []))
+        confidence = result_dict.get("confidence", 0.0)
+        processing_time = result_dict.get("processing_time", 0.0)
+        
+        logger.info(
+            f"MCP工具调用成功: recognize_image_deepseek, "
+            f"识别文本长度: {text_length}字符, "
+            f"文本块数量: {boxes_count}, "
+            f"平均置信度: {confidence:.2f}, "
+            f"处理时间: {processing_time:.2f}秒"
+        )
+        
+        return result_dict
     except Exception as e:
+        logger.error(f"MCP工具调用失败: recognize_image_deepseek, 错误: {e}", exc_info=True)
         return {
             "error": str(e),
             "text": "",
@@ -87,7 +125,10 @@ def recognize_image_paddleocr_mcp(image_path: str) -> dict:
     Returns:
         OCR result with text, bounding boxes, confidence, and processing time
     """
+    logger = get_logger("tools.recognize_image_paddleocr_mcp")
     try:
+        logger.info(f"MCP工具调用开始: recognize_image_paddleocr_mcp, 图片路径: {image_path}")
+        
         # Validate image
         validate_image(image_path)
         
@@ -95,8 +136,24 @@ def recognize_image_paddleocr_mcp(image_path: str) -> dict:
         engine = OCREngineFactory.get_engine("paddleocr_mcp")
         result = engine.recognize_image(image_path)
         
-        return result.to_dict()
+        # Log result summary
+        result_dict = result.to_dict()
+        text_length = len(result_dict.get("text", ""))
+        boxes_count = len(result_dict.get("boxes", []))
+        confidence = result_dict.get("confidence", 0.0)
+        processing_time = result_dict.get("processing_time", 0.0)
+        
+        logger.info(
+            f"MCP工具调用成功: recognize_image_paddleocr_mcp, "
+            f"识别文本长度: {text_length}字符, "
+            f"文本块数量: {boxes_count}, "
+            f"平均置信度: {confidence:.2f}, "
+            f"处理时间: {processing_time:.2f}秒"
+        )
+        
+        return result_dict
     except Exception as e:
+        logger.error(f"MCP工具调用失败: recognize_image_paddleocr_mcp, 错误: {e}", exc_info=True)
         return {
             "error": str(e),
             "text": "",
@@ -123,7 +180,10 @@ def recognize_image_easyocr(image_path: str, languages: str = "ch_sim,en") -> di
     Returns:
         OCR result with text, bounding boxes, confidence, and processing time
     """
+    logger = get_logger("tools.recognize_image_easyocr")
     try:
+        logger.info(f"MCP工具调用开始: recognize_image_easyocr, 图片路径: {image_path}, 语言: {languages}")
+        
         # Validate image
         validate_image(image_path)
         
@@ -134,8 +194,24 @@ def recognize_image_easyocr(image_path: str, languages: str = "ch_sim,en") -> di
         engine = OCREngineFactory.get_engine("easyocr", languages=lang_list)
         result = engine.recognize_image(image_path)
         
-        return result.to_dict()
+        # Log result summary
+        result_dict = result.to_dict()
+        text_length = len(result_dict.get("text", ""))
+        boxes_count = len(result_dict.get("boxes", []))
+        confidence = result_dict.get("confidence", 0.0)
+        processing_time = result_dict.get("processing_time", 0.0)
+        
+        logger.info(
+            f"MCP工具调用成功: recognize_image_easyocr, "
+            f"识别文本长度: {text_length}字符, "
+            f"文本块数量: {boxes_count}, "
+            f"平均置信度: {confidence:.2f}, "
+            f"处理时间: {processing_time:.2f}秒"
+        )
+        
+        return result_dict
     except Exception as e:
+        logger.error(f"MCP工具调用失败: recognize_image_easyocr, 错误: {e}", exc_info=True)
         return {
             "error": str(e),
             "text": "",
@@ -170,7 +246,17 @@ def get_recent_logs(
         - total: Total number of log entries read
         - filtered: Number of entries after filtering
     """
+    logger = get_logger("tools.get_recent_logs")
     try:
+        filter_info = []
+        if level:
+            filter_info.append(f"级别={level}")
+        if engine:
+            filter_info.append(f"引擎={engine}")
+        if search:
+            filter_info.append(f"搜索={search}")
+        filter_str = ", ".join(filter_info) if filter_info else "无过滤"
+        logger.info(f"MCP工具调用开始: get_recent_logs, 行数={lines}, 过滤条件: {filter_str}")
         log_file = Path(LOG_FILE)
         if not log_file.exists():
             return {
@@ -262,15 +348,22 @@ def get_recent_logs(
                     "message": line,
                 })
         
-        return {
+        result = {
             "logs": log_entries,
             "total": len(recent_lines),
             "filtered": len(log_entries)
         }
         
+        logger.info(
+            f"MCP工具调用成功: get_recent_logs, "
+            f"读取日志总数: {result['total']}, "
+            f"过滤后数量: {result['filtered']}"
+        )
+        
+        return result
+        
     except Exception as e:
-        logger = get_logger("tools")
-        logger.error(f"Error reading logs: {e}", exc_info=True)
+        logger.error(f"MCP工具调用失败: get_recent_logs, 错误: {e}", exc_info=True)
         return {
             "logs": [],
             "total": 0,

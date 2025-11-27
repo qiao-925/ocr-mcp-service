@@ -1,8 +1,12 @@
 {
   "mcpServers": {
     "ocr-service": {
-      "command": "ocr-mcp-server",
-      "args": []
+      "command": "python",
+      "args": [
+        "-m",
+        "ocr_mcp_service"
+      ],
+      "cwd": "C:\\Users\\Q\\Desktop\\Github\\ocr-mcp-service"
     }
   }
 }

@@ -59,6 +59,7 @@ build-backend = "hatchling.build"
 
 [tool.hatchling.build]
 sources = ["src"]
+include = ["prompt_template.md", "usage_guide.md"]
 
 [tool.black]
 line-length = 100

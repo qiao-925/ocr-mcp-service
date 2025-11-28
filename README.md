@@ -89,7 +89,8 @@ ocr-mcp-server --help
 如果服务器无法启动，检查：
 1. 是否已安装：`pip list | grep ocr-mcp-service`
 2. 命令是否在 PATH 中：`which ocr-mcp-server`
-3. 查看 Cursor 的 MCP 日志（通常在 Cursor 设置中）
+3. 查看 Cursor 的 MCP 日志（在输出面板中选择 "MCP"）
+4. 查看 OCR 服务日志：查看 `logs/ocr_service.log` 文件
 
 ### 4. 使用
 
@@ -97,6 +98,25 @@ ocr-mcp-server --help
 
 ```
 请使用 recognize_image_paddleocr 工具识别图片：图片路径
+```
+
+**获取使用指南**：
+
+```
+# 获取完整的使用指南和技巧
+请使用 get_usage_guide 工具获取使用说明
+```
+
+**使用示例Prompt模板**：
+
+```
+使用示例prompt模板识别这张图片：图片路径
+```
+
+或批量处理：
+
+```
+使用示例prompt模板识别这个文件夹：文件夹路径
 ```
 
 ---
@@ -134,15 +154,30 @@ ocr-mcp-server --help
 使用 recognize_image_paddleocr_mcp 识别：图片路径
 ```
 
-### 案例 3：查看日志
-
-如果识别出现问题，可以查看日志：
+### 案例 3：获取使用指南
 
 ```
-使用 get_recent_logs 工具查看最近的日志
+请使用 get_usage_guide 工具获取使用说明和技巧
 ```
 
-或使用命令行：
+### 案例 4：使用示例Prompt模板
+
+**单张图片：**
+```
+使用示例prompt模板识别这张图片：东野圭吾图片测试集/IMG_20251124_220855.jpg
+```
+
+**批量处理：**
+```
+使用示例prompt模板识别这个文件夹：东野圭吾图片测试集/
+```
+
+### 案例 6：查看日志
+
+**在 Cursor 中查看 MCP 日志**：
+- 打开输出面板（`Ctrl+Shift+U` / `Cmd+Shift+U`），选择 "MCP" 查看实时日志
+
+**使用命令行查看日志**：
 
 ```bash
 python scripts/tail_logs.py                    # 实时查看所有日志
@@ -162,7 +197,8 @@ python scripts/tail_logs.py --search "初始化"   # 搜索包含"初始化"的�
 | `recognize_image_paddleocr_mcp` | paddleocr-mcp 识别 | 官方 MCP 实现 |
 | `recognize_image_easyocr` | EasyOCR 识别 | 多语言文档（80+语言） |
 | `recognize_image_deepseek` | DeepSeek OCR 识别 | 高准确率需求（模型较大） |
-| `get_recent_logs` | 查看日志 | 故障排查 |
+| `get_prompt_template` | 获取通用 Prompt 模板 | 获取图片分析通用模板 |
+| `get_usage_guide` | 获取使用指南 | 使用说明和技巧 |
 
 ---
 
@@ -188,9 +224,24 @@ python scripts/list_tools.py
 
 ## 📚 了解更多
 
+- **[Prompt 模板指南](prompt_template.md)** - 完整的图片分析工作流指南，包含通用模板和最佳实践
 - **[详细文档](docs/README.md)** - 完整的文档索引，包含实现细节、方案对比、技术文档
 - **[API 参考](docs/构建计划.md)** - 所有工具的详细 API 文档
 - **[引擎对比](docs/OCR完整指南.md)** - 各引擎的详细对比和测试报告
+
+### 📖 Prompt 模板使用
+
+本工具提供了完整的图片分析 Prompt 指南，帮助你更好地使用 OCR 工具进行图片分析。指南包含：
+
+- **架构说明**：三部分数据流（OCR技术结果、视觉识别、Agent总结）
+- **统一处理流程**：单个图片视为批量处理中只有一个元素的情况
+- **通用模板**：灵活的通用 Prompt 模板，可根据需求调整
+- **结果存储**：文件夹结构和文件命名规范
+- **快速参考**：最佳实践和使用技巧
+
+**获取方式**：
+- 在 Cursor 中使用 `get_prompt_template` 工具获取模板
+- 或直接查看 `prompt_template.md` 文档
 
 ---
 

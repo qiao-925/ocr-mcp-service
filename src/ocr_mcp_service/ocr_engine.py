@@ -30,6 +30,9 @@ def _add_analysis_to_result(ocr_result: OCRResult, layout_info: Optional[dict] =
     analysis = _analysis_generator.generate_analysis(ocr_result, layout_info)
     ocr_result.analysis = analysis
     
+    # Note: prompt_suggestion is no longer automatically added
+    # Use get_prompt_template tool to get prompt example
+    
     return ocr_result
 
 

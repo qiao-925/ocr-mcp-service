@@ -1,13 +1,13 @@
 """MCP tool definitions."""
 
-import re
 from pathlib import Path
 from typing import Optional
 from .mcp_server import mcp
 from .ocr_engine import OCREngineFactory
 from .utils import validate_image
-from .config import LOG_FILE
 from .logger import get_logger
+from .prompt_loader import get_scenario_template
+import re
 
 
 @mcp.tool()
@@ -15,12 +15,22 @@ def recognize_image_paddleocr(image_path: str, lang: str = "ch") -> dict:
     """
     Recognize text in an image using PaddleOCR engine.
     
+    This tool performs OCR recognition and returns the recognized text, bounding boxes,
+    confidence scores, and technical analysis. For prompt templates/examples for image
+    analysis, use the get_prompt_template tool separately.
+    
     Args:
         image_path: Path to the image file
         lang: Language code (default: 'ch' for Chinese)
     
     Returns:
-        OCR result with text, bounding boxes, confidence, processing time, and technical analysis
+        OCR result dictionary containing:
+        - text: Recognized text content
+        - boxes: Bounding boxes for text regions
+        - confidence: Average confidence score
+        - engine: OCR engine name
+        - processing_time: Processing time in seconds
+        - analysis: Technical analysis (optional)
     """
     logger = get_logger("tools.recognize_image_paddleocr")
     try:
@@ -73,7 +83,13 @@ def recognize_image_deepseek(image_path: str) -> dict:
         image_path: Path to the image file
     
     Returns:
-        OCR result with text, confidence, and processing time
+        OCR result dictionary containing:
+        - text: Recognized text content
+        - boxes: Bounding boxes for text regions
+        - confidence: Average confidence score
+        - engine: OCR engine name
+        - processing_time: Processing time in seconds
+        - analysis: Technical analysis (optional)
     """
     logger = get_logger("tools.recognize_image_deepseek")
     try:
@@ -123,7 +139,13 @@ def recognize_image_paddleocr_mcp(image_path: str) -> dict:
         image_path: Path to the image file
     
     Returns:
-        OCR result with text, bounding boxes, confidence, and processing time
+        OCR result dictionary containing:
+        - text: Recognized text content
+        - boxes: Bounding boxes for text regions
+        - confidence: Average confidence score
+        - engine: OCR engine name
+        - processing_time: Processing time in seconds
+        - analysis: Technical analysis (optional)
     """
     logger = get_logger("tools.recognize_image_paddleocr_mcp")
     try:
@@ -178,7 +200,13 @@ def recognize_image_easyocr(image_path: str, languages: str = "ch_sim,en") -> di
                   'ja' (Japanese), 'ko' (Korean), 'fr' (French), 'de' (German), etc.
     
     Returns:
-        OCR result with text, bounding boxes, confidence, and processing time
+        OCR result dictionary containing:
+        - text: Recognized text content
+        - boxes: Bounding boxes for text regions
+        - confidence: Average confidence score
+        - engine: OCR engine name
+        - processing_time: Processing time in seconds
+        - analysis: Technical analysis (optional)
     """
     logger = get_logger("tools.recognize_image_easyocr")
     try:
@@ -223,151 +251,139 @@ def recognize_image_easyocr(image_path: str, languages: str = "ch_sim,en") -> di
 
 
 @mcp.tool()
-def get_recent_logs(
-    lines: int = 100,
-    level: Optional[str] = None,
-    engine: Optional[str] = None,
-    search: Optional[str] = None
-) -> dict:
+def get_prompt_template() -> dict:
     """
-    Get recent log entries from the OCR service log file.
+    Get general prompt template for image analysis.
     
-    This tool provides a user-friendly way to view logs when MCP tools are being used.
+    Returns:
+        Dictionary with template.
+    """
+    logger = get_logger("tools.get_prompt_template")
+    try:
+        logger.info("MCP工具调用开始: get_prompt_template")
+        template = get_scenario_template()
+        logger.info("MCP工具调用成功: get_prompt_template")
+        return {
+            "template": template,
+            "scenario_name": "通用模板"
+        }
+    except Exception as e:
+        logger.error(f"MCP工具调用失败: get_prompt_template, 错误: {e}", exc_info=True)
+        return {
+            "error": str(e),
+            "template": None
+        }
+
+
+def _get_usage_guide_file_path() -> Optional[Path]:
+    """Get the path to the usage guide file."""
+    # Try multiple locations
+    try:
+        # 1. In the installed package
+        import importlib.resources
+        with importlib.resources.files("ocr_mcp_service") as package_path:
+            guide_path = package_path.parent.parent / "usage_guide.md"
+            if guide_path.exists():
+                return guide_path
+    except Exception:
+        pass
     
-    Args:
-        lines: Number of recent log lines to return (default: 100, max: 1000)
-        level: Filter by log level (debug/info/warning/error). Case insensitive.
-        engine: Filter by OCR engine name (paddleocr/easyocr/deepseek/paddleocr_mcp). Case insensitive.
-        search: Search for keyword in log messages. Case insensitive.
+    # 2. In the project root (development mode)
+    try:
+        package_path = Path(__file__).parent.parent.parent
+        guide_path = package_path / "usage_guide.md"
+        if guide_path.exists():
+            return guide_path
+    except Exception:
+        pass
+    
+    # 3. Try relative to current file
+    try:
+        current_file = Path(__file__)
+        project_root = current_file.parent.parent.parent.parent
+        guide_path = project_root / "usage_guide.md"
+        if guide_path.exists():
+            return guide_path
+    except Exception:
+        pass
+    
+    return None
+
+
+def _load_usage_guide_from_file() -> dict:
+    """Load usage guide from file and parse into sections."""
+    guide_path = _get_usage_guide_file_path()
+    if guide_path is None:
+        raise FileNotFoundError(
+            "无法找到使用指南文件。请确保文件已正确安装或位于usage_guide.md"
+        )
+    
+    try:
+        with open(guide_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        
+        if not content.strip():
+            raise ValueError("使用指南文件为空")
+        
+        # Split by "---" separator (markdown horizontal rule)
+        # The file has three sections: guide, tips, examples
+        parts = re.split(r'^---+$', content, flags=re.MULTILINE)
+        
+        if len(parts) >= 3:
+            return {
+                "guide": parts[0].strip(),
+                "tips": parts[1].strip(),
+                "examples": parts[2].strip()
+            }
+        elif len(parts) == 2:
+            return {
+                "guide": parts[0].strip(),
+                "tips": parts[1].strip(),
+                "examples": ""
+            }
+        else:
+            # If no separator found, treat entire content as guide
+            return {
+                "guide": content.strip(),
+                "tips": "",
+                "examples": ""
+            }
+    except FileNotFoundError:
+        raise
+    except Exception as e:
+        raise IOError(f"无法读取使用指南文件: {e}")
+
+
+@mcp.tool()
+def get_usage_guide() -> dict:
+    """
+    Get usage guide and tips for using OCR MCP service.
+    
+    This tool provides comprehensive usage instructions, tips, and examples
+    for using the OCR MCP service effectively.
     
     Returns:
         Dictionary containing:
-        - logs: List of log entries matching the filters
-        - total: Total number of log entries read
-        - filtered: Number of entries after filtering
+        - guide: Complete usage guide
+        - tips: Usage tips and best practices
+        - examples: Practical usage examples
     """
-    logger = get_logger("tools.get_recent_logs")
+    logger = get_logger("tools.get_usage_guide")
     try:
-        filter_info = []
-        if level:
-            filter_info.append(f"级别={level}")
-        if engine:
-            filter_info.append(f"引擎={engine}")
-        if search:
-            filter_info.append(f"搜索={search}")
-        filter_str = ", ".join(filter_info) if filter_info else "无过滤"
-        logger.info(f"MCP工具调用开始: get_recent_logs, 行数={lines}, 过滤条件: {filter_str}")
-        log_file = Path(LOG_FILE)
-        if not log_file.exists():
-            return {
-                "logs": [],
-                "total": 0,
-                "filtered": 0,
-                "message": f"Log file not found: {LOG_FILE}"
-            }
+        logger.info("MCP工具调用开始: get_usage_guide")
         
-        # Read log file
-        max_lines = min(lines, 1000)  # Cap at 1000 lines
-        log_entries = []
+        # Load from file (will raise exception if file not found)
+        guide = _load_usage_guide_from_file()
         
-        try:
-            with open(log_file, "r", encoding="utf-8") as f:
-                all_lines = f.readlines()
-                # Get last N lines
-                recent_lines = all_lines[-max_lines:] if len(all_lines) > max_lines else all_lines
-        except Exception as e:
-            logger = get_logger("tools")
-            logger.error(f"Failed to read log file: {e}")
-            return {
-                "logs": [],
-                "total": 0,
-                "filtered": 0,
-                "error": str(e)
-            }
-        
-        # Parse log entries
-        log_pattern = re.compile(
-            r'\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\] (\w+) \[([^\]]+)\] (.+)'
-        )
-        
-        for line in recent_lines:
-            line = line.strip()
-            if not line:
-                continue
-            
-            match = log_pattern.match(line)
-            if match:
-                timestamp, log_level, logger_name, message = match.groups()
-                
-                # Extract progress info if present
-                progress = None
-                stage = None
-                if "progress=" in message:
-                    progress_match = re.search(r'progress=(\d+(?:\.\d+)?)%', message)
-                    if progress_match:
-                        progress = float(progress_match.group(1))
-                if "stage=" in message:
-                    stage_match = re.search(r'stage=([^|]+)', message)
-                    if stage_match:
-                        stage = stage_match.group(1).strip()
-                
-                # Apply filters
-                if level and log_level.upper() != level.upper():
-                    continue
-                
-                if engine:
-                    logger_lower = logger_name.lower()
-                    engine_lower = engine.lower()
-                    if engine_lower not in logger_lower:
-                        continue
-                
-                if search and search.lower() not in message.lower():
-                    continue
-                
-                log_entry = {
-                    "timestamp": timestamp,
-                    "level": log_level,
-                    "logger": logger_name,
-                    "message": message,
-                }
-                
-                if progress is not None:
-                    log_entry["progress"] = progress
-                if stage:
-                    log_entry["stage"] = stage
-                
-                log_entries.append(log_entry)
-            else:
-                # Handle non-standard log format
-                if search and search.lower() not in line.lower():
-                    continue
-                log_entries.append({
-                    "timestamp": "",
-                    "level": "UNKNOWN",
-                    "logger": "",
-                    "message": line,
-                })
-        
-        result = {
-            "logs": log_entries,
-            "total": len(recent_lines),
-            "filtered": len(log_entries)
-        }
-        
-        logger.info(
-            f"MCP工具调用成功: get_recent_logs, "
-            f"读取日志总数: {result['total']}, "
-            f"过滤后数量: {result['filtered']}"
-        )
-        
-        return result
+        logger.info("MCP工具调用成功: get_usage_guide")
+        return guide
         
     except Exception as e:
-        logger.error(f"MCP工具调用失败: get_recent_logs, 错误: {e}", exc_info=True)
+        logger.error(f"MCP工具调用失败: get_usage_guide, 错误: {e}", exc_info=True)
         return {
-            "logs": [],
-            "total": 0,
-            "filtered": 0,
-            "error": str(e)
+            "error": str(e),
+            "guide": None,
+            "tips": None,
+            "examples": None
         }
 

@@ -25,6 +25,7 @@ class OCRResult:
     processing_time: float
     analysis: Optional[str] = None
     progress_history: List[Dict[str, Any]] = field(default_factory=list)
+    prompt_suggestion: Optional[Dict[str, Any]] = None
 
     def to_dict(self) -> dict:
         """Convert to dictionary."""
@@ -42,6 +43,8 @@ class OCRResult:
             result["analysis"] = self.analysis
         if self.progress_history:
             result["progress_history"] = self.progress_history
+        if self.prompt_suggestion:
+            result["prompt_suggestion"] = self.prompt_suggestion
         return result
 
     def get_text_with_analysis(self) -> str:

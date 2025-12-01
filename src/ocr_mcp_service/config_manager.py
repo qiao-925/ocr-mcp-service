@@ -54,43 +54,48 @@ def get_ocr_service_config() -> dict:
     """Get OCR service configuration.
     
     Automatically detects the best configuration method:
-    1. If ocr-mcp-server command exists, use it
-    2. If venv exists, use venv/bin/python
+    1. If venv exists, use venv/bin/python (preferred)
+    2. If ocr-mcp-server command exists in venv, use it
     3. Otherwise, use python3 -m ocr_mcp_service with proper paths
     """
     import shutil
     from pathlib import Path
     
-    # Check if ocr-mcp-server command exists
+    # Get project root (assuming this file is in src/ocr_mcp_service/)
+    project_root = Path(__file__).parent.parent.parent
+    src_dir = project_root / "src"
+    
+    # Check if virtual environment exists (.venv or venv) - PRIORITY
+    venv_paths = [
+        project_root / ".venv" / "bin" / "python",  # uv default
+        project_root / "venv" / "bin" / "python",   # standard
+    ]
+    
+    for venv_python in venv_paths:
+        if venv_python.exists():
+            # Use virtual environment Python (use absolute path of symlink, not resolved)
+            # This ensures Python detects it's in a venv and uses the correct site-packages
+            venv_python_abs = project_root.resolve() / venv_python.relative_to(project_root)
+            return {
+                "command": str(venv_python_abs),
+                "args": [
+                    "-m",
+                    "ocr_mcp_service"
+                ],
+                "cwd": str(project_root.resolve()),
+                "env": {
+                    "PYTHONPATH": str(src_dir.resolve())
+                }
+            }
+    
+    # Fallback: Check if ocr-mcp-server command exists (system-wide)
     if shutil.which("ocr-mcp-server"):
         return {
             "command": "ocr-mcp-server",
             "args": []
         }
     
-    # Get project root (assuming this file is in src/ocr_mcp_service/)
-    project_root = Path(__file__).parent.parent.parent
-    src_dir = project_root / "src"
-    
-    # Check if virtual environment exists
-    venv_python = project_root / "venv" / "bin" / "python"
-    if venv_python.exists():
-        # Use virtual environment Python (use absolute path without resolving symlinks)
-        # This ensures we use the venv Python, not the system Python it points to
-        venv_python_abs = project_root.resolve() / "venv" / "bin" / "python"
-        return {
-            "command": str(venv_python_abs),
-            "args": [
-                "-m",
-                "ocr_mcp_service"
-            ],
-            "cwd": str(project_root.resolve()),
-            "env": {
-                "PYTHONPATH": str(src_dir.resolve())
-            }
-        }
-    
-    # Fallback: use system Python module with proper paths
+    # Final fallback: use system Python module with proper paths
     return {
         "command": "python3",
         "args": [

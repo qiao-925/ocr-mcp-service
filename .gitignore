@@ -33,10 +33,6 @@ ENV/
 *.swo
 *~
 
-# Cursor
-.cursor/
-.cursorrules
-
 # Environment variables
 .env
 .env.local

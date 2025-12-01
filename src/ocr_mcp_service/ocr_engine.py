@@ -80,12 +80,19 @@ class PaddleOCREngine(OCREngine):
         self.logger.info(f"开始OCR识别: {image_path}", extra={"image_path": image_path})
         progress_tracker.update(10, "图像加载", "图像路径验证完成")
 
-        # PaddleOCR 3.x API - cls parameter removed
-        progress_tracker.update(20, "OCR引擎调用", "调用PaddleOCR引擎...")
+        # 启动心跳机制，防止长时间操作中断连接
+        progress_tracker.start_heartbeat()
         
         try:
-            result = self.ocr.ocr(image_path)
-            progress_tracker.update(80, "结果解析", "OCR完成，开始解析结果")
+            # PaddleOCR 3.x API - cls parameter removed
+            progress_tracker.update(20, "OCR引擎调用", "调用PaddleOCR引擎...")
+            
+            try:
+                result = self.ocr.ocr(image_path)
+                progress_tracker.update(80, "结果解析", "OCR完成，开始解析结果")
+            finally:
+                # 确保心跳在操作完成后停止
+                progress_tracker.stop_heartbeat()
         except Exception as e:
             self.logger.error(f"OCR引擎调用失败: {e}", exc_info=True)
             raise
@@ -203,6 +210,8 @@ class PaddleOCREngine(OCREngine):
         result = _add_analysis_to_result(result)
         
         progress_tracker.update(100, "完成", "处理完成")
+        # 确保心跳在完成后停止
+        progress_tracker.stop_heartbeat()
         self.logger.info(
             f"OCR识别完成，耗时 {processing_time:.2f}秒，识别到 {len(text_parts)} 个文本块",
             extra={"processing_time": processing_time, "text_count": len(text_parts)}
@@ -356,32 +365,36 @@ class DeepSeekOCREngine(OCREngine):
         self.logger.info(f"开始OCR识别: {image_path}", extra={"image_path": image_path})
         progress_tracker.update(10, "图像加载", "图像路径验证完成")
 
-        if self.pipeline is not None:
-            # Use pipeline if available
-            result = self.pipeline(image_path)
-            
-            # Parse DeepSeek OCR result
-            if isinstance(result, list) and result:
-                text = result[0].get("generated_text", "")
-            elif isinstance(result, dict):
-                text = result.get("generated_text", "")
+        # 启动心跳机制，防止长时间操作中断连接
+        progress_tracker.start_heartbeat()
+        
+        try:
+            if self.pipeline is not None:
+                # Use pipeline if available
+                result = self.pipeline(image_path)
+                
+                # Parse DeepSeek OCR result
+                if isinstance(result, list) and result:
+                    text = result[0].get("generated_text", "")
+                elif isinstance(result, dict):
+                    text = result.get("generated_text", "")
+                else:
+                    text = str(result)
             else:
-                text = str(result)
-        else:
-            # Use direct model loading with infer method
-            # According to official docs, DeepSeek OCR has an infer() method
-            # Official usage: model.infer(tokenizer, prompt=prompt, image_file=image_file, ...)
-            import os
-            import tempfile
-            
-            # Prepare prompt for OCR
-            # Default prompt for document OCR
-            prompt = "<image>\n<|grounding|>Convert the document to markdown. "
-            
-            # Create a temporary output directory for this inference
-            temp_output = tempfile.mkdtemp(prefix="deepseek_ocr_")
-            
-            progress_tracker.update(20, "OCR引擎调用", "调用DeepSeek OCR模型...")
+                # Use direct model loading with infer method
+                # According to official docs, DeepSeek OCR has an infer() method
+                # Official usage: model.infer(tokenizer, prompt=prompt, image_file=image_file, ...)
+                import os
+                import tempfile
+                
+                # Prepare prompt for OCR
+                # Default prompt for document OCR
+                prompt = "<image>\n<|grounding|>Convert the document to markdown. "
+                
+                # Create a temporary output directory for this inference
+                temp_output = tempfile.mkdtemp(prefix="deepseek_ocr_")
+                
+                progress_tracker.update(20, "OCR引擎调用", "调用DeepSeek OCR模型...")
             
             try:
                 # Call model.infer() method (official API)
@@ -433,6 +446,8 @@ class DeepSeekOCREngine(OCREngine):
                     shutil.rmtree(temp_output, ignore_errors=True)
                 except:
                     pass
+                # 确保心跳在操作完成后停止
+                progress_tracker.stop_heartbeat()
 
         processing_time = time.time() - start_time
         
@@ -451,6 +466,8 @@ class DeepSeekOCREngine(OCREngine):
         result = _add_analysis_to_result(result)
         
         progress_tracker.update(100, "完成", "处理完成")
+        # 确保心跳在完成后停止
+        progress_tracker.stop_heartbeat()
         self.logger.info(
             f"OCR识别完成，耗时 {processing_time:.2f}秒",
             extra={"processing_time": processing_time}
@@ -494,87 +511,94 @@ class PaddleOCRMCPEngine(OCREngine):
         self.logger.info(f"开始OCR识别: {image_path}", extra={"image_path": image_path})
         progress_tracker.update(10, "图像加载", "图像路径验证完成")
 
-        # paddleocr-mcp is an MCP server, we need to call it via Python module
-        # Try to use it as a Python module first, fallback to subprocess
+        # 启动心跳机制，防止长时间操作中断连接
+        progress_tracker.start_heartbeat()
+        
         try:
-            import sys
-            import importlib.util
-            
-            # Try to use paddleocr-mcp's internal API if available
-            # Since paddleocr-mcp is an MCP server, we'll use subprocess to call it
-            # as a standalone MCP server process
-            
-            # Use python -m paddleocr_mcp to start the MCP server and communicate via stdio
-            # For now, we'll use a simplified approach: use PaddleOCR directly
-            # since paddleocr-mcp wraps PaddleOCR
-            
-            # Fallback: use PaddleOCR directly (paddleocr-mcp uses PaddleOCR internally)
-            progress_tracker.update(20, "OCR引擎调用", "调用PaddleOCR引擎...")
-            
-            from paddleocr import PaddleOCR
-            ocr = PaddleOCR()
-            result = ocr.ocr(image_path)
-            
-            progress_tracker.update(80, "结果解析", "OCR完成，开始解析结果")
-            
-            # Parse result (same as PaddleOCREngine)
-            text_parts = []
-            boxes = []
-            confidences = []
-            
-            if result and len(result) > 0:
-                page_result = result[0]
-                total_items = 0
-                if isinstance(page_result, dict):
-                    total_items = len(page_result.get('rec_texts', []))
+            # paddleocr-mcp is an MCP server, we need to call it via Python module
+            # Try to use it as a Python module first, fallback to subprocess
+            try:
+                import sys
+                import importlib.util
                 
-                if isinstance(page_result, dict):
-                    rec_texts = page_result.get('rec_texts', [])
-                    rec_scores = page_result.get('rec_scores', [])
-                    rec_polys = page_result.get('rec_polys', [])
+                # Try to use paddleocr-mcp's internal API if available
+                # Since paddleocr-mcp is an MCP server, we'll use subprocess to call it
+                # as a standalone MCP server process
+                
+                # Use python -m paddleocr_mcp to start the MCP server and communicate via stdio
+                # For now, we'll use a simplified approach: use PaddleOCR directly
+                # since paddleocr-mcp wraps PaddleOCR
+                
+                # Fallback: use PaddleOCR directly (paddleocr-mcp uses PaddleOCR internally)
+                progress_tracker.update(20, "OCR引擎调用", "调用PaddleOCR引擎...")
+                
+                from paddleocr import PaddleOCR
+                ocr = PaddleOCR()
+                result = ocr.ocr(image_path)
+                
+                progress_tracker.update(80, "结果解析", "OCR完成，开始解析结果")
+                
+                # Parse result (same as PaddleOCREngine)
+                text_parts = []
+                boxes = []
+                confidences = []
+                
+                if result and len(result) > 0:
+                    page_result = result[0]
+                    total_items = 0
+                    if isinstance(page_result, dict):
+                        total_items = len(page_result.get('rec_texts', []))
                     
-                    for i, text in enumerate(rec_texts):
-                        if text:
-                            text_parts.append(text)
-                            confidence = rec_scores[i] if i < len(rec_scores) else 1.0
-                            confidences.append(float(confidence))
-                            
-                            if i < len(rec_polys):
-                                poly = rec_polys[i]
-                                if poly is not None and len(poly) >= 4:
-                                    x_coords = [p[0] for p in poly]
-                                    y_coords = [p[1] for p in poly]
-                                    boxes.append(
-                                        BoundingBox(
-                                            x1=float(min(x_coords)),
-                                            y1=float(min(y_coords)),
-                                            x2=float(max(x_coords)),
-                                            y2=float(max(y_coords)),
+                    if isinstance(page_result, dict):
+                        rec_texts = page_result.get('rec_texts', [])
+                        rec_scores = page_result.get('rec_scores', [])
+                        rec_polys = page_result.get('rec_polys', [])
+                        
+                        for i, text in enumerate(rec_texts):
+                            if text:
+                                text_parts.append(text)
+                                confidence = rec_scores[i] if i < len(rec_scores) else 1.0
+                                confidences.append(float(confidence))
+                                
+                                if i < len(rec_polys):
+                                    poly = rec_polys[i]
+                                    if poly is not None and len(poly) >= 4:
+                                        x_coords = [p[0] for p in poly]
+                                        y_coords = [p[1] for p in poly]
+                                        boxes.append(
+                                            BoundingBox(
+                                                x1=float(min(x_coords)),
+                                                y1=float(min(y_coords)),
+                                                x2=float(max(x_coords)),
+                                                y2=float(max(y_coords)),
+                                            )
                                         )
-                                    )
+                                    else:
+                                        boxes.append(BoundingBox(0, 0, 0, 0))
                                 else:
                                     boxes.append(BoundingBox(0, 0, 0, 0))
-                            else:
-                                boxes.append(BoundingBox(0, 0, 0, 0))
-                        
-                        # Update progress during parsing
-                        if total_items > 0:
-                            progress = 80 + (i + 1) / total_items * 15
-                            if (i + 1) % max(1, total_items // 10) == 0 or i == total_items - 1:
-                                progress_tracker.update(
-                                    progress,
-                                    "结果解析",
-                                    f"已解析 {i + 1}/{total_items} 个文本块"
-                                )
-            
-            full_text = "\n".join(text_parts)
-            avg_confidence = (
-                sum(confidences) / len(confidences) if confidences else 0.0
-            )
-            
-        except Exception as e:
-            self.logger.error(f"paddleocr-mcp识别失败: {e}", exc_info=True)
-            raise RuntimeError(f"paddleocr-mcp recognition failed: {e}")
+                            
+                            # Update progress during parsing
+                            if total_items > 0:
+                                progress = 80 + (i + 1) / total_items * 15
+                                if (i + 1) % max(1, total_items // 10) == 0 or i == total_items - 1:
+                                    progress_tracker.update(
+                                        progress,
+                                        "结果解析",
+                                        f"已解析 {i + 1}/{total_items} 个文本块"
+                                    )
+                
+                full_text = "\n".join(text_parts)
+                avg_confidence = (
+                    sum(confidences) / len(confidences) if confidences else 0.0
+                )
+                
+            except Exception as e:
+                self.logger.error(f"paddleocr-mcp识别失败: {e}", exc_info=True)
+                raise RuntimeError(f"paddleocr-mcp recognition failed: {e}")
+        finally:
+            # 确保心跳在操作完成后停止
+            progress_tracker.stop_heartbeat()
 
         processing_time = time.time() - start_time
         
@@ -593,6 +617,8 @@ class PaddleOCRMCPEngine(OCREngine):
         result = _add_analysis_to_result(result)
         
         progress_tracker.update(100, "完成", "处理完成")
+        # 确保心跳在完成后停止
+        progress_tracker.stop_heartbeat()
         self.logger.info(
             f"OCR识别完成，耗时 {processing_time:.2f}秒，识别到 {len(text_parts)} 个文本块",
             extra={"processing_time": processing_time, "text_count": len(text_parts)}
@@ -642,29 +668,36 @@ class EasyOCREngine(OCREngine):
         
         self.logger.info(f"开始OCR识别: {image_path}", extra={"image_path": str(image_path)})
         progress_tracker.update(10, "图像加载", "加载图像文件...")
+
+        # 启动心跳机制，防止长时间操作中断连接
+        progress_tracker.start_heartbeat()
         
-        # Use PIL to read image (handles Unicode paths better than OpenCV)
-        # Then convert to numpy array for EasyOCR
         try:
-            from PIL import Image
-            import numpy as np
-            
-            # Read image with PIL (supports Unicode paths)
-            pil_image = Image.open(str(image_path)).convert('RGB')
-            # Convert to numpy array
-            img_array = np.array(pil_image)
-            progress_tracker.update(20, "OCR引擎调用", "调用EasyOCR引擎...")
-            
-            # EasyOCR readtext returns: [[bbox, text, confidence], ...]
-            # bbox format: [[x1,y1], [x2,y2], [x3,y3], [x4,y4]] (4 corner points)
-            results = self.reader.readtext(img_array)
-            progress_tracker.update(80, "结果解析", "OCR完成，开始解析结果")
-        except Exception as e:
-            # Fallback to file path if PIL fails
-            self.logger.warning(f"PIL读取失败，使用文件路径: {e}")
-            progress_tracker.update(20, "OCR引擎调用", "调用EasyOCR引擎（文件路径）...")
-            results = self.reader.readtext(str(image_path))
-            progress_tracker.update(80, "结果解析", "OCR完成，开始解析结果")
+            # Use PIL to read image (handles Unicode paths better than OpenCV)
+            # Then convert to numpy array for EasyOCR
+            try:
+                from PIL import Image
+                import numpy as np
+                
+                # Read image with PIL (supports Unicode paths)
+                pil_image = Image.open(str(image_path)).convert('RGB')
+                # Convert to numpy array
+                img_array = np.array(pil_image)
+                progress_tracker.update(20, "OCR引擎调用", "调用EasyOCR引擎...")
+                
+                # EasyOCR readtext returns: [[bbox, text, confidence], ...]
+                # bbox format: [[x1,y1], [x2,y2], [x3,y3], [x4,y4]] (4 corner points)
+                results = self.reader.readtext(img_array)
+                progress_tracker.update(80, "结果解析", "OCR完成，开始解析结果")
+            except Exception as e:
+                # Fallback to file path if PIL fails
+                self.logger.warning(f"PIL读取失败，使用文件路径: {e}")
+                progress_tracker.update(20, "OCR引擎调用", "调用EasyOCR引擎（文件路径）...")
+                results = self.reader.readtext(str(image_path))
+                progress_tracker.update(80, "结果解析", "OCR完成，开始解析结果")
+        finally:
+            # 确保心跳在操作完成后停止
+            progress_tracker.stop_heartbeat()
 
         text_parts = []
         boxes = []
@@ -722,6 +755,8 @@ class EasyOCREngine(OCREngine):
         result = _add_analysis_to_result(result)
         
         progress_tracker.update(100, "完成", "处理完成")
+        # 确保心跳在完成后停止
+        progress_tracker.stop_heartbeat()
         self.logger.info(
             f"OCR识别完成，耗时 {processing_time:.2f}秒，识别到 {len(text_parts)} 个文本块",
             extra={"processing_time": processing_time, "text_count": len(text_parts)}
@@ -731,29 +766,70 @@ class EasyOCREngine(OCREngine):
 
 
 class OCREngineFactory:
-    """Factory for creating OCR engines."""
+    """Factory for creating OCR engines with lazy loading and resource management."""
 
     _engines: dict[str, OCREngine] = {}
+    _engine_usage_count: dict[str, int] = {}  # Track usage count for each engine
 
     @classmethod
     def get_engine(cls, engine_type: str, **kwargs) -> OCREngine:
-        """Get OCR engine instance (singleton).
+        """Get OCR engine instance (singleton with lazy loading).
         
         Args:
             engine_type: Type of engine ('paddleocr', 'easyocr', 'deepseek', 'paddleocr_mcp')
             **kwargs: Additional arguments for engine initialization
+        
+        Returns:
+            OCREngine instance
         """
-        if engine_type not in cls._engines:
-            if engine_type == "paddleocr":
-                cls._engines[engine_type] = PaddleOCREngine()
-            elif engine_type == "deepseek":
-                cls._engines[engine_type] = DeepSeekOCREngine()
-            elif engine_type == "paddleocr_mcp":
-                cls._engines[engine_type] = PaddleOCRMCPEngine()
-            elif engine_type == "easyocr":
-                languages = kwargs.get('languages', None)
-                cls._engines[engine_type] = EasyOCREngine(languages=languages)
+        # For easyocr, use languages as part of the key to support different language configs
+        if engine_type == "easyocr" and "languages" in kwargs:
+            languages = kwargs.get('languages', None)
+            if languages:
+                # Create a unique key for each language combination
+                engine_key = f"{engine_type}_{','.join(sorted(languages))}"
             else:
-                raise ValueError(f"Unknown engine type: {engine_type}")
-        return cls._engines[engine_type]
+                engine_key = engine_type
+        else:
+            engine_key = engine_type
+        
+        if engine_key not in cls._engines:
+            logger = get_logger("OCREngineFactory")
+            logger.info(f"初始化OCR引擎: {engine_type}")
+            try:
+                if engine_type == "paddleocr":
+                    cls._engines[engine_key] = PaddleOCREngine()
+                elif engine_type == "deepseek":
+                    cls._engines[engine_key] = DeepSeekOCREngine()
+                elif engine_type == "paddleocr_mcp":
+                    cls._engines[engine_key] = PaddleOCRMCPEngine()
+                elif engine_type == "easyocr":
+                    languages = kwargs.get('languages', None)
+                    cls._engines[engine_key] = EasyOCREngine(languages=languages)
+                else:
+                    raise ValueError(f"Unknown engine type: {engine_type}")
+                
+                cls._engine_usage_count[engine_key] = 0
+                logger.info(f"OCR引擎初始化成功: {engine_type}")
+            except Exception as e:
+                logger.error(f"OCR引擎初始化失败: {engine_type}, 错误: {e}", exc_info=True)
+                raise
+        
+        # Track usage
+        cls._engine_usage_count[engine_key] = cls._engine_usage_count.get(engine_key, 0) + 1
+        return cls._engines[engine_key]
+    
+    @classmethod
+    def get_engine_count(cls) -> int:
+        """Get total number of loaded engines."""
+        return len(cls._engines)
+    
+    @classmethod
+    def get_usage_stats(cls) -> dict:
+        """Get usage statistics for all engines."""
+        return {
+            "total_engines": len(cls._engines),
+            "engines": list(cls._engines.keys()),
+            "usage_count": cls._engine_usage_count.copy()
+        }
 

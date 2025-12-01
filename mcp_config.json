@@ -1,12 +1,15 @@
 {
   "mcpServers": {
     "ocr-service": {
-      "command": "python",
+      "command": "python3",
       "args": [
         "-m",
         "ocr_mcp_service"
       ],
-      "cwd": "C:\\Users\\Q\\Desktop\\Github\\ocr-mcp-service"
+      "cwd": "/home/qiao/data/github-repos-manager/AI-Practice (1071.1号高地)/ocr-mcp-service",
+      "env": {
+        "PYTHONPATH": "/home/qiao/data/github-repos-manager/AI-Practice (1071.1号高地)/ocr-mcp-service/src"
+      }
     }
   }
 }

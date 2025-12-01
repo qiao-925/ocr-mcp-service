@@ -4,10 +4,43 @@ from pathlib import Path
 from typing import Optional
 from .mcp_server import mcp
 from .ocr_engine import OCREngineFactory
-from .utils import validate_image
+from .utils import validate_image, with_timeout
 from .logger import get_logger
 from .prompt_loader import get_scenario_template
+from .config import OCR_TIMEOUT, get_timeout_for_image
 import re
+
+
+def _recognize_with_engine(engine_type: str, image_path: str, **kwargs):
+    """Internal function to recognize image with timeout protection.
+    
+    使用动态超时：根据图片大小自动调整超时时间。
+    
+    Args:
+        engine_type: Type of OCR engine
+        image_path: Path to image file
+        **kwargs: Additional arguments for engine recognition
+    
+    Returns:
+        OCRResult object
+    """
+    from .utils import with_timeout
+    
+    # 根据图片大小动态设置超时
+    timeout = get_timeout_for_image(image_path)
+    
+    @with_timeout(timeout)
+    def _do_recognize():
+        validate_image(image_path)
+        # Handle special case for easyocr which needs languages parameter during engine creation
+        if engine_type == "easyocr" and "languages" in kwargs:
+            languages = kwargs.pop("languages")
+            engine = OCREngineFactory.get_engine(engine_type, languages=languages)
+        else:
+            engine = OCREngineFactory.get_engine(engine_type)
+        return engine.recognize_image(image_path, **kwargs)
+    
+    return _do_recognize()
 
 
 @mcp.tool()
@@ -36,12 +69,8 @@ def recognize_image_paddleocr(image_path: str, lang: str = "ch") -> dict:
     try:
         logger.info(f"MCP工具调用开始: recognize_image_paddleocr, 图片路径: {image_path}, 语言: {lang}")
         
-        # Validate image
-        validate_image(image_path)
-        
-        # Get engine and recognize
-        engine = OCREngineFactory.get_engine("paddleocr")
-        result = engine.recognize_image(image_path, lang=lang)
+        # Recognize with timeout protection
+        result = _recognize_with_engine("paddleocr", image_path, lang=lang)
         
         # Log result summary
         result_dict = result.to_dict()
@@ -59,10 +88,50 @@ def recognize_image_paddleocr(image_path: str, lang: str = "ch") -> dict:
         )
         
         return result_dict
-    except Exception as e:
-        logger.error(f"MCP工具调用失败: recognize_image_paddleocr, 错误: {e}", exc_info=True)
+    except TimeoutError as e:
+        timeout = get_timeout_for_image(image_path)
+        error_msg = f"OCR处理超时（超过{timeout}秒）。图片可能过大或过于复杂。建议：1) 尝试压缩图片 2) 使用更快的引擎 3) 分批处理大图片"
+        logger.error(f"MCP工具调用超时: recognize_image_paddleocr, {error_msg}")
         return {
-            "error": str(e),
+            "error": error_msg,
+            "error_type": "TimeoutError",
+            "error_recovery": "尝试压缩图片或使用更快的引擎",
+            "text": "",
+            "boxes": [],
+            "confidence": 0.0,
+            "engine": "paddleocr",
+            "processing_time": 0.0,
+        }
+    except FileNotFoundError as e:
+        error_msg = f"图片文件未找到: {e}"
+        logger.error(f"MCP工具调用失败: recognize_image_paddleocr, {error_msg}")
+        return {
+            "error": error_msg,
+            "error_type": "FileNotFoundError",
+            "text": "",
+            "boxes": [],
+            "confidence": 0.0,
+            "engine": "paddleocr",
+            "processing_time": 0.0,
+        }
+    except ValueError as e:
+        error_msg = f"图片验证失败: {e}"
+        logger.error(f"MCP工具调用失败: recognize_image_paddleocr, {error_msg}")
+        return {
+            "error": error_msg,
+            "error_type": "ValueError",
+            "text": "",
+            "boxes": [],
+            "confidence": 0.0,
+            "engine": "paddleocr",
+            "processing_time": 0.0,
+        }
+    except Exception as e:
+        error_msg = f"OCR处理失败: {e}"
+        logger.error(f"MCP工具调用失败: recognize_image_paddleocr, {error_msg}", exc_info=True)
+        return {
+            "error": error_msg,
+            "error_type": type(e).__name__,
             "text": "",
             "boxes": [],
             "confidence": 0.0,
@@ -95,12 +164,8 @@ def recognize_image_deepseek(image_path: str) -> dict:
     try:
         logger.info(f"MCP工具调用开始: recognize_image_deepseek, 图片路径: {image_path}")
         
-        # Validate image
-        validate_image(image_path)
-        
-        # Get engine and recognize
-        engine = OCREngineFactory.get_engine("deepseek")
-        result = engine.recognize_image(image_path)
+        # Recognize with timeout protection
+        result = _recognize_with_engine("deepseek", image_path)
         
         # Log result summary
         result_dict = result.to_dict()
@@ -118,10 +183,26 @@ def recognize_image_deepseek(image_path: str) -> dict:
         )
         
         return result_dict
-    except Exception as e:
-        logger.error(f"MCP工具调用失败: recognize_image_deepseek, 错误: {e}", exc_info=True)
+    except TimeoutError as e:
+        timeout = get_timeout_for_image(image_path)
+        error_msg = f"OCR处理超时（超过{timeout}秒）。DeepSeek OCR处理大图片较慢。建议：1) 使用paddleocr或easyocr 2) 压缩图片 3) 分批处理"
+        logger.error(f"MCP工具调用超时: recognize_image_deepseek, {error_msg}")
         return {
-            "error": str(e),
+            "error": error_msg,
+            "error_type": "TimeoutError",
+            "error_recovery": "使用更快的引擎（paddleocr/easyocr）或压缩图片",
+            "text": "",
+            "boxes": [],
+            "confidence": 0.0,
+            "engine": "deepseek",
+            "processing_time": 0.0,
+        }
+    except Exception as e:
+        error_msg = f"OCR处理失败: {e}"
+        logger.error(f"MCP工具调用失败: recognize_image_deepseek, {error_msg}", exc_info=True)
+        return {
+            "error": error_msg,
+            "error_type": type(e).__name__,
             "text": "",
             "boxes": [],
             "confidence": 0.0,
@@ -151,12 +232,8 @@ def recognize_image_paddleocr_mcp(image_path: str) -> dict:
     try:
         logger.info(f"MCP工具调用开始: recognize_image_paddleocr_mcp, 图片路径: {image_path}")
         
-        # Validate image
-        validate_image(image_path)
-        
-        # Get engine and recognize
-        engine = OCREngineFactory.get_engine("paddleocr_mcp")
-        result = engine.recognize_image(image_path)
+        # Recognize with timeout protection
+        result = _recognize_with_engine("paddleocr_mcp", image_path)
         
         # Log result summary
         result_dict = result.to_dict()
@@ -174,10 +251,26 @@ def recognize_image_paddleocr_mcp(image_path: str) -> dict:
         )
         
         return result_dict
-    except Exception as e:
-        logger.error(f"MCP工具调用失败: recognize_image_paddleocr_mcp, 错误: {e}", exc_info=True)
+    except TimeoutError as e:
+        timeout = get_timeout_for_image(image_path)
+        error_msg = f"OCR处理超时（超过{timeout}秒）。图片可能过大或过于复杂。建议：1) 尝试压缩图片 2) 使用更快的引擎 3) 分批处理大图片"
+        logger.error(f"MCP工具调用超时: recognize_image_paddleocr_mcp, {error_msg}")
         return {
-            "error": str(e),
+            "error": error_msg,
+            "error_type": "TimeoutError",
+            "error_recovery": "尝试压缩图片或使用更快的引擎",
+            "text": "",
+            "boxes": [],
+            "confidence": 0.0,
+            "engine": "paddleocr_mcp",
+            "processing_time": 0.0,
+        }
+    except Exception as e:
+        error_msg = f"OCR处理失败: {e}"
+        logger.error(f"MCP工具调用失败: recognize_image_paddleocr_mcp, {error_msg}", exc_info=True)
+        return {
+            "error": error_msg,
+            "error_type": type(e).__name__,
             "text": "",
             "boxes": [],
             "confidence": 0.0,
@@ -212,15 +305,11 @@ def recognize_image_easyocr(image_path: str, languages: str = "ch_sim,en") -> di
     try:
         logger.info(f"MCP工具调用开始: recognize_image_easyocr, 图片路径: {image_path}, 语言: {languages}")
         
-        # Validate image
-        validate_image(image_path)
-        
         # Parse languages
         lang_list = [lang.strip() for lang in languages.split(',') if lang.strip()]
         
-        # Get engine with specified languages
-        engine = OCREngineFactory.get_engine("easyocr", languages=lang_list)
-        result = engine.recognize_image(image_path)
+        # Recognize with timeout protection
+        result = _recognize_with_engine("easyocr", image_path, languages=lang_list)
         
         # Log result summary
         result_dict = result.to_dict()
@@ -238,10 +327,26 @@ def recognize_image_easyocr(image_path: str, languages: str = "ch_sim,en") -> di
         )
         
         return result_dict
-    except Exception as e:
-        logger.error(f"MCP工具调用失败: recognize_image_easyocr, 错误: {e}", exc_info=True)
+    except TimeoutError as e:
+        timeout = get_timeout_for_image(image_path)
+        error_msg = f"OCR处理超时（超过{timeout}秒）。图片可能过大或过于复杂。建议：1) 尝试压缩图片 2) 减少支持的语言数量 3) 分批处理大图片"
+        logger.error(f"MCP工具调用超时: recognize_image_easyocr, {error_msg}")
         return {
-            "error": str(e),
+            "error": error_msg,
+            "error_type": "TimeoutError",
+            "error_recovery": "压缩图片或减少支持的语言数量",
+            "text": "",
+            "boxes": [],
+            "confidence": 0.0,
+            "engine": "easyocr",
+            "processing_time": 0.0,
+        }
+    except Exception as e:
+        error_msg = f"OCR处理失败: {e}"
+        logger.error(f"MCP工具调用失败: recognize_image_easyocr, {error_msg}", exc_info=True)
+        return {
+            "error": error_msg,
+            "error_type": type(e).__name__,
             "text": "",
             "boxes": [],
             "confidence": 0.0,
@@ -352,6 +457,57 @@ def _load_usage_guide_from_file() -> dict:
         raise
     except Exception as e:
         raise IOError(f"无法读取使用指南文件: {e}")
+
+
+@mcp.tool()
+def health_check() -> dict:
+    """
+    Check MCP service health status.
+    
+    Returns service health information including loaded engines,
+    usage statistics, and system status.
+    
+    Returns:
+        Dictionary containing:
+        - status: Service status (healthy/degraded/unhealthy)
+        - engines_loaded: Number of loaded OCR engines
+        - engines: List of loaded engine names
+        - usage_stats: Engine usage statistics
+        - timestamp: Check timestamp
+    """
+    from datetime import datetime
+    logger = get_logger("tools.health_check")
+    
+    try:
+        logger.info("MCP工具调用开始: health_check")
+        
+        # Get engine statistics
+        stats = OCREngineFactory.get_usage_stats()
+        
+        # Determine service status
+        status = "healthy"
+        if stats["total_engines"] == 0:
+            status = "degraded"  # No engines loaded, but service is running
+        
+        result = {
+            "status": status,
+            "engines_loaded": stats["total_engines"],
+            "engines": stats["engines"],
+            "usage_stats": stats["usage_count"],
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        logger.info(f"MCP工具调用成功: health_check, 状态: {status}")
+        return result
+        
+    except Exception as e:
+        logger.error(f"MCP工具调用失败: health_check, 错误: {e}", exc_info=True)
+        return {
+            "status": "unhealthy",
+            "error": str(e),
+            "error_type": type(e).__name__,
+            "timestamp": datetime.now().isoformat()
+        }
 
 
 @mcp.tool()

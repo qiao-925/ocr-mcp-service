@@ -52,6 +52,18 @@ mcp_config.json
 .cache/
 models/
 
+# OCR results and test outputs
+**/ocr_results/
+**/vision_analysis/
+**/agent_summary/
+**/*_ocr.json
+**/*_ocr.txt
+**/batch_summary.json
+**/batch_summary.md
+**/batch_report.json
+temp_*.json
+temp_*.txt
+
 # OS
 .DS_Store
 Thumbs.db

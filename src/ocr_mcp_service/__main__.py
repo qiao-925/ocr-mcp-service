@@ -35,7 +35,7 @@ def main():
     """Run the MCP server with error handling and recovery."""
     try:
         logger.info("MCP服务器启动中...")
-        mcp.run()
+    mcp.run()
     except KeyboardInterrupt:
         logger.info("收到中断信号，正在优雅关闭服务器...")
         sys.exit(0)

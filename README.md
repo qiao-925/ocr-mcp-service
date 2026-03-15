@@ -1,250 +1,320 @@
-# OCR MCP Service
+# Local OCR MCP
 
-统一的 OCR MCP 服务，支持多种 OCR 引擎，通过工具名称区分引擎。
+> 基于 `FastMCP` 与 `PaddleOCR` 的最小化本地 OCR MCP 服务，只保留 `stdio -> ocr_recognize -> PaddleOCR -> 统一响应 envelope` 这一条主路径，适合本地 IDE、Agent 和 MCP Client 直接接入。
 
-## 🚀 快速开始
+---
 
-### 1. 安装
+## 1. 快速开始
 
-**基础安装（必须）：**
-```bash
-# 使用 uv（推荐）
-uv venv
-uv pip install -e .
+**环境要求**
 
-# 或使用 pip
-pip install -e .
-```
+- `Python 3.10+`
+- `uv`
 
-**安装 OCR 引擎（至少选择一个）：**
+**PyPI 发布状态**
 
-```bash
-# PaddleOCR（推荐，中文优秀）
-uv pip install -e ".[paddleocr]"
-# 或
-pip install -e ".[paddleocr]"
+- 已发布到 PyPI：`local-ocr-mcp==0.2.0`
+- 项目页：<https://pypi.org/project/local-ocr-mcp/>
 
-# EasyOCR（支持 80+ 语言）
-uv pip install -e ".[easyocr]"
-# 或
-pip install -e ".[easyocr]"
-
-# DeepSeek OCR（高准确率，模型较大 ~7.8GB）
-uv pip install -e ".[deepseek]"
-# 或
-pip install -e ".[deepseek]"
-
-# 安装多个引擎
-uv pip install -e ".[paddleocr,easyocr]"
-# 或
-pip install -e ".[paddleocr,easyocr]"
-```
-
-> **注意**：`paddleocr-mcp` 工具使用 PaddleOCR 引擎，安装 `paddleocr` 后即可使用。
-
-### 2. 配置 Cursor
+**1. 直接用 `uvx` 运行**
 
 ```bash
-# 自动配置（推荐）
-python scripts/setup_cursor.py
-
-# 配置完成后，重启 Cursor 即可使用
+uvx --from "local-ocr-mcp[paddleocr]==0.2.0" local-ocr-mcp
 ```
 
-### 3. MCP 服务器启动
+适合直接接入 MCP 客户端，不需要手动创建虚拟环境。
 
-**重要说明**：MCP 服务器由 Cursor 自动启动，无需手动启动。
+首次运行会安装 `paddleocr`、`paddlepaddle`、`opencv` 等依赖，时间可能明显更长；后续复用缓存后会快很多。
 
-**工作原理**：
-- Cursor 会根据配置文件（`~/.cursor/mcp.json`）自动启动 MCP 服务器
-- 服务器通过 stdio（标准输入输出）与 Cursor 通信
-- 当你在 Cursor 中调用工具时，Cursor 会自动启动服务器并发送请求
-
-**手动测试服务器**（可选）：
-
-如果你想手动测试服务器是否正常工作：
+如果你希望始终跟随最新发布版本，也可以省略固定版本号：
 
 ```bash
-# 直接运行服务器（会通过 stdio 通信）
-ocr-mcp-server
-
-# 或使用 Python 模块方式
-python -m ocr_mcp_service
+uvx --from "local-ocr-mcp[paddleocr]" local-ocr-mcp
 ```
 
-**验证服务器配置**：
+**2. 本地开发运行**
 
 ```bash
-# 检查 MCP 配置是否正确
-python scripts/check_mcp_config.py
-
-# 验证服务器命令是否可用
-which ocr-mcp-server
-# 或
-ocr-mcp-server --help
+git clone <repository-url>
+cd local-ocr-mcp
+uv sync --extra dev --extra paddleocr
+uv run python -m local_ocr_mcp
 ```
 
-**故障排查**：
+**3. MCP 客户端配置示例**
 
-如果服务器无法启动，检查：
-1. 是否已安装：`pip list | grep ocr-mcp-service`
-2. 命令是否在 PATH 中：`which ocr-mcp-server`
-3. 查看 Cursor 的 MCP 日志（在输出面板中选择 "MCP"）
-4. 查看 OCR 服务日志：查看 `logs/ocr_service.log` 文件
-
-### 4. 使用
-
-在 Cursor 中直接调用工具：
-
-```
-请使用 recognize_image_paddleocr 工具识别图片：图片路径
+```json
+{
+  "mcpServers": {
+    "local-ocr-mcp": {
+      "command": "uvx",
+      "args": ["--from", "local-ocr-mcp[paddleocr]==0.2.0", "local-ocr-mcp"]
+    }
+  }
+}
 ```
 
-**获取使用指南**：
+> 📖 仓库里也保留了一份同步后的配置样例 → [mcp_config.json](/home/q/Desktop/START/repos/AI/ML/local-ocr-mcp/mcp_config.json)
 
-```
-# 获取完整的使用指南和技巧
-请使用 get_usage_guide 工具获取使用说明
+---
+
+## 2. 核心特性
+
+| 特性 | 说明 |
+|------|------|
+| **单路径主链路** | 只保留 `stdio -> ocr_recognize -> PaddleOCR`，没有传输分支和引擎路由 |
+| **最小工具面** | 对外只暴露 `ocr_recognize` 与 `ocr_health_check` 两个工具 |
+| **统一响应契约** | 所有工具统一返回 `status / data / error / meta` envelope |
+| **固定输入模型** | 当前只接受本地图片路径 `image.path`，不支持 URL、base64 或上传流 |
+| **稳定错误语义** | 用固定错误码暴露常见失败路径，便于客户端编排与恢复 |
+| **低认知负担** | 不保留多引擎、analysis、progress、heartbeat、registry/factory 等扩展层 |
+
+---
+
+## 3. 技术栈
+
+- **Python 3.10+** / **uv** - 运行时与依赖管理
+- **FastMCP** - MCP 服务框架
+- **PaddleOCR** - 固定 OCR 引擎
+- **Pillow** - 图片合法性校验
+- **pytest** - 最小契约测试
+
+---
+
+## 4. 架构概览
+
+```text
+┌──────────────────────────────────────────────────────┐
+│                 MCP Client / IDE / Agent            │
+├──────────────────────────────────────────────────────┤
+│                     stdio transport                  │
+├──────────────────────────────────────────────────────┤
+│       FastMCP Tools: ocr_recognize / health_check   │
+├──────────────────────────────────────────────────────┤
+│  RecognitionService            HealthService         │
+├──────────────────────────────────────────────────────┤
+│                  PaddleOCREngine                    │
+├──────────────────────────────────────────────────────┤
+│          PaddleOCR / Filesystem / Image Validation   │
+└──────────────────────────────────────────────────────┘
 ```
 
-**使用示例Prompt模板**：
+当前实现刻意保持单向依赖和短链路：
 
-```
-使用示例prompt模板识别这张图片：图片路径
+- CLI 只负责启动 `stdio`
+- Tool 层只负责暴露 MCP 接口
+- Service 层负责校验输入并整形成统一 envelope
+- Engine 层只负责调用 `PaddleOCR` 并归一化结果
+
+---
+
+## 5. 工具契约
+
+| 工具 | 说明 |
+|------|------|
+| `ocr_recognize` | 识别本地图片并返回统一 OCR 结果 |
+| `ocr_health_check` | 返回轻量健康状态、运行时版本和启动时长 |
+
+### `ocr_recognize` 请求示例
+
+```json
+{
+  "image": {
+    "path": "./example.png"
+  }
+}
 ```
 
-或批量处理：
+### `ocr_recognize` 输入约束
 
+- `image` 必须是对象
+- `image.path` 必须是非空字符串
+- 当前只允许 `image.path`
+- 相对路径会按服务进程当前工作目录解析为绝对路径
+
+### `ocr_recognize` 成功响应示例
+
+```json
+{
+  "status": "ok",
+  "data": {
+    "text": "示例文本",
+    "boxes": [
+      {"x1": 0.0, "y1": 0.0, "x2": 120.0, "y2": 32.0}
+    ],
+    "confidence": 0.98,
+    "engine": "paddleocr",
+    "processing_ms": 143
+  },
+  "error": null,
+  "meta": {
+    "timestamp": "2026-03-14T00:00:00+00:00",
+    "runtime_version": "0.2.0",
+    "request_id": "8c4c9d5c-6b4d-4f1f-b6df-4ff80e3ff6b6",
+    "resolved_engine": "paddleocr",
+    "resolved_image_path": "/abs/path/example.png"
+  }
+}
 ```
-使用示例prompt模板识别这个文件夹：文件夹路径
+
+### `ocr_health_check` 响应示例
+
+```json
+{
+  "status": "ok",
+  "data": {
+    "status": "healthy",
+    "uptime_ms": 1234,
+    "transport": "stdio",
+    "runtime_version": "0.2.0"
+  },
+  "error": null,
+  "meta": {
+    "timestamp": "2026-03-14T00:00:00+00:00",
+    "runtime_version": "0.2.0"
+  }
+}
 ```
 
 ---
 
-## 💡 实际使用案例
+## 6. 错误语义与运行约束
 
-### 案例 1：识别一张图片
+### 统一错误结构
 
-假设你有一张图片 `东野圭吾图片测试集/IMG_20251124_220855.jpg`，在 Cursor 中直接说：
-
-```
-请使用 recognize_image_paddleocr 工具识别这张图片：东野圭吾图片测试集/IMG_20251124_220855.jpg
-```
-
-或者：
-
-```
-识别这张图片中的文字：东野圭吾图片测试集/IMG_20251124_220855.jpg
-```
-
-### 案例 2：使用不同引擎
-
-**中文文档（推荐 PaddleOCR）：**
-```
-使用 recognize_image_paddleocr 识别：图片路径
-```
-
-**多语言文档（使用 EasyOCR）：**
-```
-使用 recognize_image_easyocr 识别：图片路径
+```json
+{
+  "status": "error",
+  "data": null,
+  "error": {
+    "code": "file_not_found|invalid_image|engine_not_available|internal_error",
+    "message": "具体错误信息",
+    "retryable": false
+  },
+  "meta": {
+    "timestamp": "...",
+    "runtime_version": "0.2.0",
+    "request_id": "...",
+    "resolved_engine": "paddleocr"
+  }
+}
 ```
 
-**使用官方 MCP 实现：**
-```
-使用 recognize_image_paddleocr_mcp 识别：图片路径
-```
+### 错误码说明
 
-### 案例 3：获取使用指南
+- `file_not_found`：`image.path` 指向的文件不存在
+- `invalid_image`：请求结构不合法，或文件存在但不是有效图片
+- `engine_not_available`：`PaddleOCR` 未安装或初始化失败
+- `internal_error`：识别链路内部出现未归类异常
 
-```
-请使用 get_usage_guide 工具获取使用说明和技巧
-```
+### 当前运行约束
 
-### 案例 4：使用示例Prompt模板
+- 只支持 `stdio`
+- 只支持 `PaddleOCR`
+- 不会自动切换引擎
+- 不支持 `streamable-http`
+- 不支持 analysis、progress、heartbeat
+- 不支持 URL、base64、上传流等非文件输入
 
-**单张图片：**
-```
-使用示例prompt模板识别这张图片：东野圭吾图片测试集/IMG_20251124_220855.jpg
-```
+### PaddleOCR 兼容行为
 
-**批量处理：**
-```
-使用示例prompt模板识别这个文件夹：东野圭吾图片测试集/
-```
+内部固定使用 `PaddleOCR`，但对其 Python API 保留最小兼容：
 
-### 案例 6：查看日志
+- 优先走较新的 `predict()`
+- 如果安装版本只支持旧接口，则回退到 `ocr()`
+- 对外继续返回统一响应结构
 
-**在 Cursor 中查看 MCP 日志**：
-- 打开输出面板（`Ctrl+Shift+U` / `Cmd+Shift+U`），选择 "MCP" 查看实时日志
+---
 
-**使用命令行查看日志**：
+## 7. 配置与脚本
+
+### 可选环境变量
+
+| 变量 | 说明 | 默认值 |
+|------|------|--------|
+| `PADDLEOCR_LANG` | PaddleOCR 初始化语言 | `ch` |
+| `LOG_LEVEL` | 日志级别 | `INFO` |
+
+示例：
 
 ```bash
-python scripts/tail_logs.py                    # 实时查看所有日志
-python scripts/tail_logs.py --lines 50         # 显示最近50行
-python scripts/tail_logs.py --level ERROR      # 只查看错误日志
-python scripts/tail_logs.py --engine PaddleOCR # 只查看PaddleOCR引擎日志
-python scripts/tail_logs.py --search "初始化"   # 搜索包含"初始化"的日志
+PADDLEOCR_LANG=ch LOG_LEVEL=INFO uv run python -m local_ocr_mcp
 ```
 
----
+### 辅助脚本
 
-## 🛠️ 可用工具
+当前 `scripts/` 目录只保留和最小实现一致的两个脚本：
 
-| 工具名称 | 用途 | 推荐场景 |
-|---------|------|---------|
-| `recognize_image_paddleocr` | PaddleOCR 识别 | 中文文档（推荐） |
-| `recognize_image_paddleocr_mcp` | paddleocr-mcp 识别 | 官方 MCP 实现 |
-| `recognize_image_easyocr` | EasyOCR 识别 | 多语言文档（80+语言） |
-| `recognize_image_deepseek` | DeepSeek OCR 识别 | 高准确率需求（模型较大） |
-| `get_prompt_template` | 获取通用 Prompt 模板 | 获取图片分析通用模板 |
-| `get_usage_guide` | 获取使用指南 | 使用说明和技巧 |
+- `uv run python scripts/list_tools.py`
+- `uv run python scripts/recognize_image.py path/to/image.png --json`
+
+> 📖 详细说明 → [scripts/README.md](/home/q/Desktop/START/repos/AI/ML/local-ocr-mcp/scripts/README.md)
 
 ---
 
-## 📋 常用命令
+## 8. 开发与验证
+
+常用命令：
 
 ```bash
-# 查看日志
-python scripts/tail_logs.py
-
-# 检查 MCP 配置
-python scripts/check_mcp_config.py
-
-# 验证引擎是否正常
-python scripts/verify_engines.py
-
-# 列出所有可用工具
-python scripts/list_tools.py
+uv run python -m pytest -q
+uv run python -m local_ocr_mcp --help
+uv run python scripts/list_tools.py
+uv run python scripts/recognize_image.py path/to/image.png --json
 ```
 
----
+CI 当前只覆盖最小必需验证：
+
+- 编译检查
+- 单元测试
+- CLI `--help`
+- `stdio` 启动烟测
 
 ---
 
-## 📚 了解更多
+## 9. 常见问题
 
-- **[Prompt 模板指南](prompt_template.md)** - 完整的图片分析工作流指南，包含通用模板和最佳实践
-- **[详细文档](docs/README.md)** - 完整的文档索引，包含实现细节、方案对比、技术文档
-- **[API 参考](docs/构建计划.md)** - 所有工具的详细 API 文档
-- **[引擎对比](docs/OCR完整指南.md)** - 各引擎的详细对比和测试报告
+### 1. 服务启动后为什么一直不退出？
 
-### 📖 Prompt 模板使用
+因为它在等待 MCP 客户端通过 `stdio` 调用工具。这是正常行为。
 
-本工具提供了完整的图片分析 Prompt 指南，帮助你更好地使用 OCR 工具进行图片分析。指南包含：
+### 2. 为什么返回 `engine_not_available`？
 
-- **架构说明**：三部分数据流（OCR技术结果、视觉识别、Agent总结）
-- **统一处理流程**：单个图片视为批量处理中只有一个元素的情况
-- **通用模板**：灵活的通用 Prompt 模板，可根据需求调整
-- **结果存储**：文件夹结构和文件命名规范
-- **快速参考**：最佳实践和使用技巧
+通常说明 `PaddleOCR` 或底层依赖没有正确安装。优先重新同步依赖：
 
-**获取方式**：
-- 在 Cursor 中使用 `get_prompt_template` 工具获取模板
-- 或直接查看 `prompt_template.md` 文档
+```bash
+uv sync --extra paddleocr
+```
+
+如果你是通过 `uvx` 启动，确认命令里包含：
+
+```text
+uvx --from local-ocr-mcp[paddleocr]==0.2.0 local-ocr-mcp
+```
+
+如果你故意选择跟随最新版本，也可以使用不带版本号的形式：
+
+```text
+uvx --from local-ocr-mcp[paddleocr] local-ocr-mcp
+```
+
+### 3. 为什么返回 `invalid_image`？
+
+常见原因：
+
+- 请求里没有 `image.path`
+- `image.path` 不是字符串
+- 文件存在，但不是合法图片
+
+### 4. 相对路径为什么找不到文件？
+
+相对路径是相对于服务进程当前工作目录解析的。最稳妥的做法是直接传绝对路径。
+
+### 5. 为什么不保留多引擎和 HTTP？
+
+因为当前版本明确选择“核心最小化”路线，只保留本地 OCR 主链路，不为未来扩展提前保留复杂结构。
 
 ---
 
-## 📄 许可证
-
-MIT
+**最后更新**: 2026-03-14  
+**License**: MIT

@@ -22,6 +22,8 @@ wheels/
 
 # Virtual environments
 venv/
+.venv/
+
 env/
 ENV/
 .venv
@@ -49,6 +51,7 @@ mcp_config.json
 # Models and cache
 *.pth
 *.pt
+*.tgz
 .cache/
 models/
 

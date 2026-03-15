@@ -1,21 +1,12 @@
 {
   "mcpServers": {
-    "ocr-service": {
-      "command": "python3",
+    "local-ocr-mcp": {
+      "command": "uvx",
       "args": [
-        "-m",
-        "ocr_mcp_service"
-      ],
-      "cwd": "/home/qiao/data/github-repos-manager/AI-Practice (1071.1号高地)/ocr-mcp-service",
-      "env": {
-        "PYTHONPATH": "/home/qiao/data/github-repos-manager/AI-Practice (1071.1号高地)/ocr-mcp-service/src"
-      }
+        "--from",
+        "local-ocr-mcp[paddleocr]",
+        "local-ocr-mcp"
+      ]
     }
   }
 }
-
-
-
-
-
-

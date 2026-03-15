@@ -1,209 +1,147 @@
-"""MCP工具函数测试"""
+"""Tests for the two public OCR MCP tools."""
 
-import pytest
-import tempfile
-import os
+from __future__ import annotations
+
+import asyncio
+import inspect
 from pathlib import Path
-from ocr_mcp_service.tools import (
-    recognize_image_paddleocr,
-    recognize_image_paddleocr_mcp,
-    recognize_image_easyocr,
-    recognize_image_deepseek,
-)
-from ocr_mcp_service.ocr_engine import OCREngineFactory
-from ocr_mcp_service.utils import validate_image
+
+from local_ocr_mcp import server as server_module
+from local_ocr_mcp.errors import EngineNotAvailableError
+from local_ocr_mcp.models import BoundingBox, RecognitionResult
+from local_ocr_mcp.services import RecognitionService
 
 
-def _call_tool_logic(engine_name: str, image_path: str, **kwargs) -> dict:
-    """调用工具函数的底层逻辑（不通过MCP装饰器）"""
-    try:
-        validate_image(image_path)
-        
-        if engine_name == "easyocr" and "languages" in kwargs:
-            lang_list = [lang.strip() for lang in kwargs["languages"].split(',') if lang.strip()]
-            engine = OCREngineFactory.get_engine(engine_name, languages=lang_list)
-        else:
-            engine = OCREngineFactory.get_engine(engine_name)
-        
-        if "lang" in kwargs:
-            result = engine.recognize_image(image_path, lang=kwargs["lang"])
-        else:
-            result = engine.recognize_image(image_path)
-        
-        return result.to_dict()
-    except Exception as e:
-        return {
-            "error": str(e),
-            "text": "",
-            "boxes": [],
-            "confidence": 0.0,
-            "engine": engine_name,
-            "processing_time": 0.0,
-        }
+class FakeEngine:
+    """Minimal fake PaddleOCR engine used by tool tests."""
+
+    def __init__(
+        self,
+        result: RecognitionResult | None = None,
+        error: Exception | None = None,
+    ) -> None:
+        self._result = result
+        self._error = error
+        self.calls: list[Path] = []
+
+    def recognize(self, image_path: Path) -> RecognitionResult:
+        """Record the call and return or raise the configured outcome."""
+        self.calls.append(image_path)
+        if self._error is not None:
+            raise self._error
+        if self._result is None:
+            raise AssertionError("FakeEngine result was not configured")
+        return self._result
 
 
-def test_tool_registration():
-    """测试工具注册"""
-    # 检查工具是否已注册
-    assert hasattr(recognize_image_paddleocr, 'name')
-    assert hasattr(recognize_image_paddleocr_mcp, 'name')
-    assert hasattr(recognize_image_easyocr, 'name')
-    assert hasattr(recognize_image_deepseek, 'name')
-    
-    # 检查工具名称
-    assert recognize_image_paddleocr.name == "recognize_image_paddleocr"
-    assert recognize_image_paddleocr_mcp.name == "recognize_image_paddleocr_mcp"
-    assert recognize_image_easyocr.name == "recognize_image_easyocr"
-    assert recognize_image_deepseek.name == "recognize_image_deepseek"
+def _call_tool(tool, *args, **kwargs) -> dict:
+    """Call a tool regardless of whether FastMCP wraps it."""
+    if callable(tool):
+        result = tool(*args, **kwargs)
+    elif hasattr(tool, "fn"):
+        result = tool.fn(*args, **kwargs)
+    elif hasattr(tool, "_fn"):
+        result = tool._fn(*args, **kwargs)
+    else:
+        raise TypeError("Unsupported tool object type")
+    return asyncio.run(result) if inspect.isawaitable(result) else result
 
 
-def test_tool_error_handling_nonexistent_file():
-    """测试工具对不存在文件的错误处理"""
-    # 测试所有工具对不存在文件的处理（通过底层逻辑）
-    result = _call_tool_logic("paddleocr", "nonexistent_file.jpg")
-    assert isinstance(result, dict)
-    assert "error" in result
-    assert result["text"] == ""
-    assert result["confidence"] == 0.0
-    
-    result = _call_tool_logic("paddleocr_mcp", "nonexistent_file.jpg")
-    assert isinstance(result, dict)
-    assert "error" in result
-    
-    result = _call_tool_logic("easyocr", "nonexistent_file.jpg")
-    assert isinstance(result, dict)
-    assert "error" in result
-    
-    result = _call_tool_logic("deepseek", "nonexistent_file.jpg")
-    assert isinstance(result, dict)
-    assert "error" in result
+def _patch_recognition_service(monkeypatch, engine: FakeEngine) -> FakeEngine:
+    """Patch the public tool to use one explicit recognition service."""
+    monkeypatch.setattr(
+        server_module,
+        "recognition_service",
+        RecognitionService(engine=engine),
+    )
+    return engine
 
 
-def test_tool_error_handling_invalid_file():
-    """测试工具对无效文件的错误处理"""
-    # 创建一个临时文本文件（不是图片）
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
-        f.write("not an image")
-        temp_path = f.name
-    
-    try:
-        result = _call_tool_logic("paddleocr", temp_path)
-        assert isinstance(result, dict)
-        assert "error" in result
-        
-        result = _call_tool_logic("paddleocr_mcp", temp_path)
-        assert isinstance(result, dict)
-        assert "error" in result
-        
-        result = _call_tool_logic("easyocr", temp_path)
-        assert isinstance(result, dict)
-        assert "error" in result
-        
-        result = _call_tool_logic("deepseek", temp_path)
-        assert isinstance(result, dict)
-        assert "error" in result
-    finally:
-        if os.path.exists(temp_path):
-            os.unlink(temp_path)
+def test_tool_registration() -> None:
+    """The simplified server should expose exactly two public tools."""
+    assert callable(server_module.ocr_recognize)
+    assert callable(server_module.ocr_health_check)
+    assert server_module.ocr_recognize.__name__ == "ocr_recognize"
+    assert server_module.ocr_health_check.__name__ == "ocr_health_check"
+    assert not hasattr(server_module, "ocr_list_engines")
 
 
-def test_tool_return_format():
-    """测试工具返回格式"""
-    # 即使出错，也应该返回标准格式
-    result = _call_tool_logic("paddleocr", "nonexistent.jpg")
-    
-    # 检查返回字典的必需字段
-    required_fields = ["text", "boxes", "confidence", "engine", "processing_time"]
-    for field in required_fields:
-        assert field in result, f"Missing field: {field}"
-    
-    # 检查字段类型
-    assert isinstance(result["text"], str)
-    assert isinstance(result["boxes"], list)
-    assert isinstance(result["confidence"], float)
-    assert isinstance(result["engine"], str)
-    assert isinstance(result["processing_time"], float)
+def test_ocr_recognize_invalid_image_payload() -> None:
+    """Recognize should reject non-object image payloads."""
+    result = _call_tool(server_module.ocr_recognize, image="not-an-object")
+
+    assert result["status"] == "error"
+    assert result["error"]["code"] == "invalid_image"
+    assert result["data"] is None
+    assert result["meta"]["resolved_engine"] == "paddleocr"
 
 
-def test_paddleocr_tool_with_lang():
-    """测试PaddleOCR工具的语言参数"""
-    # 测试默认语言参数
-    result = _call_tool_logic("paddleocr", "nonexistent.jpg", lang="ch")
-    assert isinstance(result, dict)
-    assert result["engine"] == "paddleocr"
-    
-    # 测试英文参数
-    result = _call_tool_logic("paddleocr", "nonexistent.jpg", lang="en")
-    assert isinstance(result, dict)
-    assert result["engine"] == "paddleocr"
+def test_ocr_recognize_success_shape(monkeypatch, sample_image_path: Path) -> None:
+    """Recognize should return the simplified success envelope."""
+    engine = _patch_recognition_service(
+        monkeypatch,
+        FakeEngine(
+            result=RecognitionResult(
+                text="hello",
+                boxes=[BoundingBox(x1=0, y1=0, x2=10, y2=10)],
+                confidence=0.9,
+                engine="paddleocr",
+                processing_ms=123,
+            )
+        ),
+    )
+
+    result = _call_tool(server_module.ocr_recognize, image={"path": str(sample_image_path)})
+
+    assert result["status"] == "ok"
+    assert result["error"] is None
+    assert result["data"]["text"] == "hello"
+    assert result["data"]["engine"] == "paddleocr"
+    assert result["data"]["processing_ms"] == 123
+    assert result["meta"]["resolved_engine"] == "paddleocr"
+    assert result["meta"]["resolved_image_path"] == str(sample_image_path.resolve())
+    assert engine.calls == [sample_image_path.resolve()]
 
 
-def test_easyocr_tool_with_languages():
-    """测试EasyOCR工具的语言参数"""
-    # 测试默认语言参数
-    result = _call_tool_logic("easyocr", "nonexistent.jpg", languages="ch_sim,en")
-    assert isinstance(result, dict)
-    assert result["engine"] == "easyocr"
-    
-    # 测试单个语言
-    result = _call_tool_logic("easyocr", "nonexistent.jpg", languages="en")
-    assert isinstance(result, dict)
-    assert result["engine"] == "easyocr"
-    
-    # 测试多个语言
-    result = _call_tool_logic("easyocr", "nonexistent.jpg", languages="ch_sim,en,ja")
-    assert isinstance(result, dict)
-    assert result["engine"] == "easyocr"
+def test_ocr_recognize_file_not_found() -> None:
+    """Missing files should map to the standardized file_not_found error."""
+    result = _call_tool(server_module.ocr_recognize, image={"path": "missing-file.png"})
+
+    assert result["status"] == "error"
+    assert result["error"]["code"] == "file_not_found"
+    assert result["data"] is None
 
 
-@pytest.mark.skipif(
-    not Path("tests/test_images").exists(),
-    reason="Test images directory not found"
-)
-def test_tool_with_real_image():
-    """测试工具使用真实图片（如果引擎已安装）"""
-    test_images = list(Path("tests/test_images").glob("*.jpg"))
-    if not test_images:
-        pytest.skip("No test images found")
-    
-    image_path = str(test_images[0])
-    
-    # 测试PaddleOCR（如果已安装）
-    try:
-        result = _call_tool_logic("paddleocr", image_path)
-        assert isinstance(result, dict)
-        assert "text" in result
-        assert "boxes" in result
-        assert "confidence" in result
-        assert result["engine"] == "paddleocr"
-        assert isinstance(result["text"], str)
-    except Exception:
-        pass  # 引擎未安装
-    
-    # 测试paddleocr_mcp（如果已安装）
-    try:
-        result = _call_tool_logic("paddleocr_mcp", image_path)
-        assert isinstance(result, dict)
-        assert "text" in result
-        assert result["engine"] == "paddleocr_mcp"
-    except Exception:
-        pass  # 引擎未安装
-    
-    # 测试EasyOCR（如果已安装）
-    try:
-        result = _call_tool_logic("easyocr", image_path)
-        assert isinstance(result, dict)
-        assert "text" in result
-        assert result["engine"] == "easyocr"
-    except Exception:
-        pass  # 引擎未安装
-    
-    # 测试DeepSeek（如果已安装）
-    try:
-        result = _call_tool_logic("deepseek", image_path)
-        assert isinstance(result, dict)
-        assert "text" in result
-        assert result["engine"] == "deepseek"
-    except Exception:
-        pass  # 引擎未安装
+def test_ocr_recognize_invalid_image_file(invalid_image_path: Path) -> None:
+    """Existing non-image files should map to invalid_image."""
+    result = _call_tool(server_module.ocr_recognize, image={"path": str(invalid_image_path)})
 
+    assert result["status"] == "error"
+    assert result["error"]["code"] == "invalid_image"
+    assert result["meta"]["resolved_engine"] == "paddleocr"
+
+
+def test_ocr_recognize_engine_unavailable(monkeypatch, sample_image_path: Path) -> None:
+    """Engine initialization failures should map to engine_not_available."""
+    _patch_recognition_service(
+        monkeypatch,
+        FakeEngine(error=EngineNotAvailableError("PaddleOCR is missing")),
+    )
+
+    result = _call_tool(server_module.ocr_recognize, image={"path": str(sample_image_path)})
+
+    assert result["status"] == "error"
+    assert result["error"]["code"] == "engine_not_available"
+    assert result["error"]["message"] == "PaddleOCR is missing"
+    assert result["meta"]["resolved_image_path"] == str(sample_image_path.resolve())
+
+
+def test_ocr_health_check_lightweight_shape() -> None:
+    """Health check should return lightweight status payload."""
+    result = _call_tool(server_module.ocr_health_check)
+
+    assert result["status"] == "ok"
+    assert result["error"] is None
+    assert result["data"]["status"] == "healthy"
+    assert "uptime_ms" in result["data"]
+    assert result["data"]["transport"] == "stdio"

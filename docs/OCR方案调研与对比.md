@@ -541,7 +541,7 @@ python scripts/list_tools.py
 ### 测试引擎初始化
 
 ```python
-from src.ocr_mcp_service.ocr_engine import OCREngineFactory
+from src.local_ocr_mcp.ocr_engine import OCREngineFactory
 
 # 测试 DeepSeek OCR
 engine = OCREngineFactory.get_engine('deepseek')

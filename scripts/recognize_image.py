@@ -1,118 +1,62 @@
-"""Recognize text in an image using OCR engines."""
+"""Recognize a local image through the simplified OCR service envelope."""
 
-import sys
+from __future__ import annotations
+
+import argparse
 import json
+import sys
 from pathlib import Path
 
-# Add project root to path before importing scripts.common
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
-
-# Setup script environment
-from scripts.common import setup_script
-setup_script()
+project_root = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(project_root / "src"))
 
 
-def recognize_with_engine(image_path, engine_type="paddleocr", include_analysis=True):
-    """Recognize text using specified engine."""
-    from ocr_mcp_service.ocr_engine import OCREngineFactory
-    from ocr_mcp_service.utils import validate_image
-    
-    # Validate image
-    validate_image(image_path)
-    
-    # Get engine and recognize
-    print(f"Loading {engine_type} engine...")
-    engine = OCREngineFactory.get_engine(engine_type)
-    print("Recognizing text...")
-    result = engine.recognize_image(image_path)
-    
-    # Remove analysis if not needed
-    if not include_analysis:
-        result.analysis = None
-    
-    return result
+def build_argument_parser() -> argparse.ArgumentParser:
+    """Create the CLI parser for single-image OCR."""
+    parser = argparse.ArgumentParser(description="Recognize one local image via Local OCR MCP")
+    parser.add_argument("image_path", help="Path to the local image file")
+    parser.add_argument("--json", action="store_true", help="Print the full response as JSON")
+    return parser
 
 
-def main():
-    """Main function."""
-    import argparse
-    
-    parser = argparse.ArgumentParser(description="OCR image recognition")
-    parser.add_argument("image_path", help="Path to image file")
-    parser.add_argument(
-        "--engine",
-        choices=["paddleocr", "paddleocr_mcp", "deepseek"],
-        default="paddleocr",
-        help="OCR engine to use (default: paddleocr)"
-    )
-    parser.add_argument(
-        "--json",
-        action="store_true",
-        help="Output as JSON"
-    )
-    parser.add_argument(
-        "--no-analysis",
-        action="store_true",
-        help="Disable technical analysis in output"
-    )
-    
-    args = parser.parse_args()
-    
-    # Use absolute path
+def main() -> int:
+    """Run single-image OCR and print either JSON or a readable summary."""
+    args = build_argument_parser().parse_args()
+
+    from local_ocr_mcp.services import RecognitionService
+
     image_path = str(Path(args.image_path).resolve())
-    
-    if not Path(image_path).exists():
-        print(f"Error: Image file not found: {image_path}")
-        sys.exit(1)
-    
+    response = RecognitionService().recognize({"path": image_path})
+
+    if args.json:
+        print(json.dumps(response, ensure_ascii=False, indent=2))
+        return 0 if response["status"] == "ok" else 1
+
     print("=" * 60)
-    print(f"OCR Recognition - {args.engine}")
+    print("Local OCR MCP")
     print("=" * 60)
     print(f"Image: {image_path}")
-    print()
-    
-    try:
-        include_analysis = not args.no_analysis
-        result = recognize_with_engine(image_path, args.engine, include_analysis=include_analysis)
-        
-        if args.json:
-            # Output as JSON
-            output = result.to_dict()
-            print(json.dumps(output, ensure_ascii=False, indent=2))
-        else:
-            # Human-readable output
-            print("\n" + "=" * 60)
-            print("Recognition Result")
-            print("=" * 60)
-            print(f"Engine: {result.engine}")
-            print(f"Processing Time: {result.processing_time:.2f}s")
-            print(f"Confidence: {result.confidence:.2f}")
-            print(f"Text Boxes: {len(result.boxes)}")
-            print("\nRecognized Text:")
-            print("-" * 60)
-            # Use get_text_with_analysis() if analysis is enabled, otherwise just text
-            if include_analysis and result.analysis:
-                print(result.get_text_with_analysis())
-            else:
-                print(result.text)
-            print("-" * 60)
-            
-            if result.boxes:
-                print(f"\nText Boxes ({len(result.boxes)}):")
-                for i, box in enumerate(result.boxes[:20], 1):  # Show first 20 boxes
-                    print(f"  Box {i}: ({box.x1:.1f}, {box.y1:.1f}) -> ({box.x2:.1f}, {box.y2:.1f})")
-                if len(result.boxes) > 20:
-                    print(f"  ... and {len(result.boxes) - 20} more boxes")
-        
-    except Exception as e:
-        print(f"\nError: {e}")
-        import traceback
-        traceback.print_exc()
-        sys.exit(1)
+    print(f"Status: {response['status']}")
+
+    if response["status"] == "ok":
+        data = response["data"]
+        assert data is not None
+        print(f"Engine: {data['engine']}")
+        print(f"Processing: {data['processing_ms']} ms")
+        print(f"Confidence: {data['confidence']:.2f}")
+        print(f"Boxes: {len(data['boxes'])}")
+        print("\nText:")
+        print("-" * 60)
+        print(data["text"])
+        print("-" * 60)
+        return 0
+
+    error = response["error"]
+    assert error is not None
+    print(f"Error: {error['code']}")
+    print(error["message"])
+    return 1
 
 
 if __name__ == "__main__":
-    main()
-
-
+    raise SystemExit(main())

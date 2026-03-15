@@ -1,38 +1,24 @@
-"""Pytest configuration."""
+"""Shared pytest fixtures for the simplified OCR service."""
+
+from __future__ import annotations
+
+from pathlib import Path
 
 import pytest
-import tempfile
-import os
-from pathlib import Path
-from unittest.mock import Mock
+from PIL import Image
 
 
 @pytest.fixture
-def test_images_dir():
-    """Fixture for test images directory."""
-    return Path("tests/test_images")
+def sample_image_path(tmp_path: Path) -> Path:
+    """Create one valid image file for OCR tests."""
+    image_path = tmp_path / "sample.png"
+    Image.new("RGB", (32, 16), color="white").save(image_path)
+    return image_path
 
 
 @pytest.fixture
-def temp_log_file():
-    """Fixture for temporary log file."""
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.log', delete=False) as f:
-        temp_path = f.name
-    
-    yield temp_path
-    
-    # 清理
-    if os.path.exists(temp_path):
-        os.unlink(temp_path)
-
-
-@pytest.fixture
-def mock_mcp_callback():
-    """Fixture for mock MCP callback function."""
-    return Mock()
-
-
-
-
-
-
+def invalid_image_path(tmp_path: Path) -> Path:
+    """Create one invalid image file for validation tests."""
+    image_path = tmp_path / "invalid.txt"
+    image_path.write_text("not an image", encoding="utf-8")
+    return image_path

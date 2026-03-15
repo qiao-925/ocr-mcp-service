@@ -1,4 +1,4 @@
-"""Tests for OCR MCP Service."""
+"""Tests for Local OCR MCP."""
 
 
 
